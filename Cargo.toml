@@ -1,0 +1,19 @@
+[package]
+name = "hostgen"
+version = "0.1.0"
+authors = ["Clint Armstrong <clint@clintarmstrong.net>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+clap = "2.33"
+log = "0.4.8"
+env_logger = "0.7.1"
+serde_yaml = "0.8.11"
+pnet = "0.26.0"
+ipnetwork = "0.16.0"
+globset = "0.4.5"
+
+[patch.crates-io]
+serde_yaml = { git = 'https://github.com/clinta/serde-yaml.git', branch='public-mapping'}
