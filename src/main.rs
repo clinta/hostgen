@@ -10,6 +10,8 @@ use log::{debug, warn};
 use pnet::datalink::{interfaces, MacAddr, NetworkInterface};
 use serde_yaml::{Mapping, Value};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::io::{self, Write};
+use tabwriter::TabWriter;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
@@ -32,12 +34,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let f = std::fs::File::open(matches.value_of("config").unwrap_or("hosts.yaml"))?;
     let data: Mapping = serde_yaml::from_reader(f)?;
-    for entry in EntryIterator::new(&data) {
-        if matches.subcommand_matches("dnsmasq").is_some() {
-            println!("{}", entry.as_dnsmasq_host());
-        } else if matches.subcommand_matches("zone").is_some() {
-            println!("{}", entry.as_zone_record());
+
+    let stdout = io::stdout();
+    let mut writer = stdout.lock();
+
+    if matches.subcommand_matches("dnsmasq").is_some() {
+        for entry in EntryIterator::new(&data) {
+            writeln!(&mut writer, "{}", entry.as_dnsmasq_host())?;
         }
+    } else if matches.subcommand_matches("zone").is_some() {
+        let mut writer = TabWriter::new(writer);
+        for entry in EntryIterator::new(&data) {
+            writeln!(&mut writer, "{}", entry.as_zone_record())?;
+        }
+        writer.flush()?;
     }
     Ok(())
 }
