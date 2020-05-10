@@ -9,8 +9,9 @@ use ipnetwork::IpNetwork;
 use log::{debug, warn};
 use pnet::datalink::{interfaces, MacAddr, NetworkInterface};
 use serde_yaml::{Mapping, Value};
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::fs::File;
 use std::io::{self, Write};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use tabwriter::TabWriter;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -28,6 +29,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .takes_value(true)
                 .index(1),
         )
+        .arg(
+            Arg::with_name("output")
+                .short("o")
+                .long("output")
+                .value_name("FILE")
+                .help("output file")
+                .takes_value(true),
+        )
         .subcommand(SubCommand::with_name("dnsmasq").about("generates dnsmasq hosts"))
         .subcommand(SubCommand::with_name("zone").about("generates zone entries"))
         .get_matches();
@@ -35,24 +44,43 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let f = std::fs::File::open(matches.value_of("config").unwrap_or("hosts.yaml"))?;
     let data: Mapping = serde_yaml::from_reader(f)?;
 
+    /*
+    let mut writer = if let Some(output) = matches.value_of("output") {
+        File::create(output)?
+    } else {
+        return Err(());
+        /*
     let stdout = io::stdout();
-    let mut writer = stdout.lock();
-
-    if matches.subcommand_matches("dnsmasq").is_some() {
-        for entry in EntryIterator::new(&data) {
-            writeln!(&mut writer, "{}", entry.as_dnsmasq_host())?;
-        }
-    } else if matches.subcommand_matches("zone").is_some() {
-        let mut writer = TabWriter::new(writer);
-        for entry in EntryIterator::new(&data) {
-            writeln!(&mut writer, "{}", entry.as_zone_record())?;
-        }
-        writer.flush()?;
+    stdout.lock()
+    */
     }
+    */
+    //EntryIterator::new(&data, EntryWriteMode::DnsMasq)
+    let mut entries = match matches.subcommand_name() {
+        Some("dnsmasq") => EntryIterator::new(&data, EntryWriteMode::DnsMasq),
+        Some("zone") => EntryIterator::new(&data, EntryWriteMode::Zone),
+        _ => return Ok(()),
+    };
+
+    if let Some(output) = matches.value_of("output") {
+        let mut writer = File::create(output)?;
+        entries.write(&mut writer)?;
+    } else {
+        let stdout = io::stdout();
+        let mut writer = stdout.lock();
+        entries.write(&mut writer)?;
+    }
+
     Ok(())
 }
 
+enum EntryWriteMode {
+    DnsMasq,
+    Zone,
+}
+
 struct EntryIterator<'a> {
+    mode: EntryWriteMode,
     nets: serde_yaml::mapping::Iter<'a>,
     real_nets: Vec<IpNetwork>,
     real_nets_iter: Option<std::vec::IntoIter<IpNetwork>>,
@@ -61,14 +89,38 @@ struct EntryIterator<'a> {
 }
 
 impl<'a> EntryIterator<'a> {
-    fn new(data: &'a Mapping) -> Self {
+    fn new(data: &'a Mapping, mode: EntryWriteMode) -> Self {
         EntryIterator {
+            mode: mode,
             nets: data.iter(),
             real_nets: Vec::new(),
             real_nets_iter: None,
             hosts_iter: None,
             host: None,
         }
+    }
+
+    fn write<W: io::Write>(&mut self, mut w: W) -> std::io::Result<()> {
+        match self.mode {
+            EntryWriteMode::DnsMasq => self.write_dnsmasq_hosts(&mut w),
+            EntryWriteMode::Zone => self.write_zone_records(&mut w),
+        }
+    }
+
+    fn write_dnsmasq_hosts<W: io::Write>(&mut self, w: &mut W) -> std::io::Result<()> {
+        for entry in self {
+            writeln!(w, "{}", entry.as_dnsmasq_host())?;
+        }
+        Ok(())
+    }
+
+    fn write_zone_records<W: io::Write>(&mut self, w: &mut W) -> std::io::Result<()> {
+        let mut w = TabWriter::new(w);
+        for entry in self {
+            writeln!(w, "{}", entry.as_zone_record())?;
+        }
+        w.flush()?;
+        Ok(())
     }
 
     fn next_real_net(&mut self) -> Option<IpNetwork> {
