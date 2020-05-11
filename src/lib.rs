@@ -12,6 +12,8 @@ use std::io::{self, Write};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use tabwriter::TabWriter;
 
+pub mod ipnet;
+
 pub enum EntryWriteMode {
     DnsMasq,
     Zone,
