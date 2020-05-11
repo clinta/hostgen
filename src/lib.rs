@@ -1,5 +1,9 @@
 #![feature(ip)]
 
+use crate::ipnet::TryToMac;
+use crate::ipnet::TryInNet;
+use crate::ipnet::InNet;
+use crate::ipnet::ToMac;
 use std::convert::TryFrom;
 use std::convert::TryInto;
 
@@ -9,7 +13,7 @@ use log::{debug, warn};
 use pnet::datalink::{interfaces, MacAddr, NetworkInterface};
 use serde_yaml::{Mapping, Value};
 use std::io::{self, Write};
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::net::{IpAddr};
 use tabwriter::TabWriter;
 
 pub mod ipnet;
@@ -148,11 +152,16 @@ impl Host {
     fn get_mac(&self) -> Option<MacAddr> {
         self.opts
             .iter()
-            .filter_map(|o| o.as_mac().cloned())
+            .filter_map(|o| o.as_mac().cloned()) // mac addresses
             .chain(
                 self.opts
                     .iter()
-                    .filter_map(|o| o.as_int().map(|i| i.to_mac())),
+                    .filter_map(|o| o.as_int().map(|i| i.to_mac())), // integers
+            )
+            .chain(
+                self.opts
+                    .iter()
+                    .filter_map(|o| o.as_ip().and_then(|ip| ip.try_to_mac())), // ip addresses
             )
             .nth(0)
     }
@@ -160,21 +169,19 @@ impl Host {
     fn get_ip(&self, net: &IpNetwork) -> Option<IpAddr> {
         self.opts
             .iter()
-            .filter(|o| o.as_ip().map(|ip| net.contains(*ip)).unwrap_or(false)) // ips directly in this network
+            .filter_map(|o| o.as_ip().filter(|ip| net.contains(**ip)).cloned()) // ips directly in this network
             .chain(
-                self.opts.iter().filter(|o| {
+                self.opts.iter().filter_map(|o| {
                     o.as_ip()
-                        .map(|ip| net.is_ipv4() == ip.is_ipv4())
-                        .unwrap_or(false)
-                }), // ips of same family
+                        .filter(|ip| net.is_ipv4() == ip.is_ipv4())
+                }).cloned(), // ips of same family
             )
             .chain(
-                self.opts.iter().filter(|o| o.is_int()), // ints
+                self.opts.iter().filter_map(|o| o.as_int().map(|i| i.to_mac().in_net(net))), // ints as mac addresses
             )
             .chain(
-                self.opts.iter().filter(|o| o.is_mac()), // mac addresses
+                self.opts.iter().filter_map(|o| o.as_mac().map(|mac| mac.in_net(net))), // mac addresses
             )
-            .map(|o| o.to_ip(net))
             .nth(0)
     }
 
@@ -195,10 +202,6 @@ enum HostOpt {
 }
 
 impl HostOpt {
-    fn is_mac(&self) -> bool {
-        self.as_mac().is_some()
-    }
-
     fn as_mac(&self) -> Option<&MacAddr> {
         match self {
             Self::Mac(mac) => Some(mac),
@@ -213,10 +216,6 @@ impl HostOpt {
         }
     }
 
-    fn is_int(&self) -> bool {
-        self.as_int().is_some()
-    }
-
     fn as_int(&self) -> Option<&u64> {
         match self {
             Self::Int(i) => Some(i),
@@ -225,14 +224,14 @@ impl HostOpt {
     }
 }
 
-impl ToIp for HostOpt {
-    fn to_ip(&self, net: &IpNetwork) -> IpAddr {
+impl TryInNet<IpNetwork, IpAddr> for HostOpt {
+    fn try_in_net(self, net: &IpNetwork) -> Option<IpAddr> {
         let ip = match self {
-            Self::Ip(v) => v.to_ip(net),
-            Self::Mac(v) => v.to_ip(net),
-            Self::Int(v) => v.to_ip(net),
+            Self::Ip(v) => v.try_in_net(net),
+            Self::Mac(v) => v.try_in_net(net),
+            Self::Int(v) => v.try_in_net(net),
         };
-        debug!("returning ip: {}", ip);
+        debug!("returning ip: {:?}", ip);
         ip
     }
 }
@@ -329,110 +328,5 @@ impl RealNets for NetworkInterface {
             })
             .filter_map(|ip| IpNetwork::with_netmask(ip.network(), ip.mask()).ok())
             .collect()
-    }
-}
-
-trait ToMac {
-    fn to_mac(&self) -> MacAddr;
-}
-
-impl ToMac for u64 {
-    fn to_mac(&self) -> MacAddr {
-        debug!("converting u64 to mac: {}", self);
-        let [_, _, a, b, c, d, e, f] = self.to_be_bytes();
-        let a = a | 0b0000_0010; // set local managed bit
-        MacAddr::new(a, b, c, d, e, f)
-    }
-}
-
-trait ToIp {
-    fn to_ip(&self, net: &IpNetwork) -> IpAddr;
-}
-
-impl ToIp for MacAddr {
-    fn to_ip(&self, net: &IpNetwork) -> IpAddr {
-        debug!("converting mac to ip: {} in {}", self, net);
-        match net {
-            IpNetwork::V4(v4) => {
-                let (ip, mask) = (v4.ip().octets(), v4.mask().octets());
-                IpAddr::V4(Ipv4Addr::new(
-                    (ip[0] & mask[0]) | (self.2 & !mask[0]),
-                    (ip[1] & mask[1]) | (self.3 & !mask[1]),
-                    (ip[2] & mask[2]) | (self.4 & !mask[2]),
-                    (ip[3] & mask[3]) | (self.5 & !mask[3]),
-                ))
-            }
-            IpNetwork::V6(v6) => {
-                let (ip, mask) = (v6.ip().octets(), v6.mask().octets());
-                IpAddr::V6(Ipv6Addr::from([
-                    ip[0] & mask[0],
-                    ip[1] & mask[1],
-                    ip[2] & mask[2],
-                    ip[3] & mask[3],
-                    ip[4] & mask[4],
-                    ip[5] & mask[5],
-                    ip[6] & mask[6],
-                    ip[7] & mask[7],
-                    (ip[8] & mask[8]) | ((self.0 ^ 0b0000_0010) & !mask[8]), // flip local managed bit
-                    (ip[9] & mask[9]) | (self.1 & !mask[9]),
-                    (ip[10] & mask[10]) | (self.2 & !mask[10]),
-                    (ip[11] & mask[11]) | (0xff & !mask[11]),
-                    (ip[12] & mask[12]) | (0xfe & !mask[12]),
-                    (ip[13] & mask[13]) | (self.3 & !mask[13]),
-                    (ip[14] & mask[14]) | (self.4 & !mask[14]),
-                    (ip[15] & mask[15]) | (self.5 & !mask[15]),
-                ]))
-            }
-        }
-    }
-}
-
-impl ToIp for u64 {
-    fn to_ip(&self, net: &IpNetwork) -> IpAddr {
-        debug!("converting u64 to ip: {:x?} in {}", self, net);
-        self.to_mac().to_ip(net)
-    }
-}
-
-impl ToIp for IpAddr {
-    fn to_ip(&self, net: &IpNetwork) -> IpAddr {
-        debug!("converting ip to ip: {} in {}", self, net);
-        let v6 = match self {
-            IpAddr::V6(v6) => *v6,
-            IpAddr::V4(v4) => v4.to_ipv6_compatible(),
-        };
-        let b = v6.octets();
-        match net {
-            IpNetwork::V4(v4) => {
-                let (ip, mask) = (v4.ip().octets(), v4.mask().octets());
-                IpAddr::V4(Ipv4Addr::new(
-                    (ip[0] & mask[0]) | (b[12] & !mask[0]),
-                    (ip[1] & mask[1]) | (b[13] & !mask[1]),
-                    (ip[2] & mask[2]) | (b[14] & !mask[2]),
-                    (ip[3] & mask[3]) | (b[15] & !mask[3]),
-                ))
-            }
-            IpNetwork::V6(v6) => {
-                let (ip, mask) = (v6.ip().octets(), v6.mask().octets());
-                IpAddr::V6(Ipv6Addr::from([
-                    (ip[0] & mask[0]) | (b[0] & !mask[0]),
-                    (ip[1] & mask[1]) | (b[1] & !mask[1]),
-                    (ip[2] & mask[2]) | (b[2] & !mask[2]),
-                    (ip[3] & mask[3]) | (b[3] & !mask[3]),
-                    (ip[4] & mask[4]) | (b[4] & !mask[4]),
-                    (ip[5] & mask[5]) | (b[5] & !mask[5]),
-                    (ip[6] & mask[6]) | (b[6] & !mask[6]),
-                    (ip[7] & mask[7]) | (b[7] & !mask[7]),
-                    (ip[8] & mask[8]) | (b[8] & !mask[8]),
-                    (ip[9] & mask[9]) | (b[9] & !mask[9]),
-                    (ip[10] & mask[10]) | (b[10] & !mask[10]),
-                    (ip[11] & mask[11]) | (b[11] & !mask[11]),
-                    (ip[12] & mask[12]) | (b[12] & !mask[12]),
-                    (ip[13] & mask[13]) | (b[13] & !mask[13]),
-                    (ip[14] & mask[14]) | (b[14] & !mask[14]),
-                    (ip[15] & mask[15]) | (b[15] & !mask[15]),
-                ]))
-            }
-        }
     }
 }
