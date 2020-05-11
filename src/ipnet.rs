@@ -59,6 +59,65 @@ impl ToEUI64Ipv6Addr for MacAddr {
     }
 }
 
+pub trait ToEUI64Mac {
+    fn to_eu64_mac(&self) -> Option<MacAddr>;
+}
+
+impl ToEUI64Mac for Ipv6Addr {
+    fn to_eu64_mac(&self) -> Option<MacAddr> {
+        let o = self.octets();
+        if o[11] != 0xff || o[12] != 0xfe {
+            None
+        } else {
+            Some(MacAddr::new(
+                o[8] ^ 0b0000_0010, // flip local managed bit
+                o[9],
+                o[10],
+                o[13],
+                o[14],
+                o[15],
+            ))
+        }
+    }
+}
+
+pub trait ToMac {
+    fn to_mac(&self) -> MacAddr;
+}
+
+impl ToMac for Ipv4Addr {
+    fn to_mac(&self) -> MacAddr {
+        let o = self.octets();
+        MacAddr::new(0b0000_0010, 0, o[0], o[1], o[2], o[3])
+    }
+}
+
+pub trait TryToMac {
+    fn try_to_mac(&self) -> Option<MacAddr>;
+}
+
+impl<T: ToMac> TryToMac for T {
+    fn try_to_mac(&self) -> Option<MacAddr> {
+        Some(self.to_mac())
+    }
+}
+
+impl TryToMac for Ipv6Addr {
+    fn try_to_mac(&self) -> Option<MacAddr> {
+        self.to_eu64_mac()
+            .or_else(|| self.to_ipv4().map(|v4| v4.to_mac()))
+    }
+}
+
+impl TryToMac for IpAddr {
+    fn try_to_mac(&self) -> Option<MacAddr> {
+        match self {
+            Self::V4(v4) => v4.try_to_mac(),
+            Self::V6(v6) => v6.try_to_mac(),
+        }
+    }
+}
+
 pub trait IntoNet<N, A> {
     fn into_net(self, net: N) -> A;
 }
@@ -92,7 +151,9 @@ impl IntoNet<Ipv6Network, Ipv6Addr> for Ipv4Addr {
 }
 
 pub trait TryIntoNet<N, A> {
-    fn try_into_net(self, net: N) -> Option<A> where A: std::marker::Sized ;
+    fn try_into_net(self, net: N) -> Option<A>
+    where
+        A: std::marker::Sized;
 }
 
 impl<N, A, S: IntoNet<N, A>> TryIntoNet<N, A> for S {
