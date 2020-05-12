@@ -25,9 +25,9 @@ pub enum EntryWriteMode {
 
 pub struct EntryIterator<'a> {
     mode: EntryWriteMode,
-    nets: serde_yaml::mapping::Iter<'a>,
-    real_nets: Vec<IpNetwork>,
-    real_nets_iter: Option<std::vec::IntoIter<IpNetwork>>,
+    data: serde_yaml::mapping::Iter<'a>,
+    networks: Vec<InterfaceNetwork>,
+    networks_iter: Option<std::vec::IntoIter<InterfaceNetwork>>,
     hosts_iter: Option<serde_yaml::mapping::Iter<'a>>,
     host: Option<Host>,
 }
@@ -36,9 +36,9 @@ impl<'a> EntryIterator<'a> {
     pub fn new(data: &'a Mapping, mode: EntryWriteMode) -> Self {
         EntryIterator {
             mode: mode,
-            nets: data.iter(),
-            real_nets: Vec::new(),
-            real_nets_iter: None,
+            data: data.iter(),
+            networks: Vec::new(),
+            networks_iter: None,
             hosts_iter: None,
             host: None,
         }
@@ -67,8 +67,8 @@ impl<'a> EntryIterator<'a> {
         Ok(())
     }
 
-    fn next_real_net(&mut self) -> Option<IpNetwork> {
-        self.real_nets_iter.as_mut().and_then(|x| x.next())
+    fn next_network(&mut self) -> Option<InterfaceNetwork> {
+        self.networks_iter.as_mut().and_then(|x| x.next())
     }
 
     fn next_host_val(&mut self) -> Option<(&Value, &Value)> {
@@ -87,9 +87,9 @@ impl<'a> EntryIterator<'a> {
                 self.next_host()
             }
         } else {
-            let (net, hosts) = self.nets.next()?; // return none if out of nets
+            let (filter, hosts) = self.data.next()?; // return none if out of data
             self.hosts_iter = hosts.as_mapping().map(|x| x.iter());
-            self.real_nets = net_to_real_nets(&net);
+            self.networks = InterfaceNetwork::filtered(&filter);
             self.next_host()
         }
     }
@@ -99,11 +99,11 @@ impl<'a> Iterator for EntryIterator<'a> {
     type Item = Entry;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let (Some(net), Some(host)) = (self.next_real_net(), self.host.as_ref()) {
-            host.as_entry(&net)
+        if let (Some(net), Some(host)) = (self.next_network(), self.host.as_ref()) {
+            host.as_entry(&net.network)
         } else {
             self.host = Some(self.next_host()?);
-            self.real_nets_iter = Some(self.real_nets.clone().into_iter());
+            self.networks_iter = Some(self.networks.clone().into_iter());
             self.next()
         }
     }
@@ -173,8 +173,7 @@ impl Host {
             .chain(
                 self.opts
                     .iter()
-                    .filter_map(|o| o.as_ip().filter(|ip| net.is_ipv4() == ip.is_ipv4()))
-                    .cloned(), // ips of same family
+                    .filter_map(|o| o.as_ip().filter(|ip| net.is_ipv4() == ip.is_ipv4()).and_then(|ip| ip.try_in_net(net))) // ips of same family
             )
             .chain(
                 self.opts
@@ -229,7 +228,7 @@ impl HostOpt {
 }
 
 impl TryInNet<IpNetwork, IpAddr> for HostOpt {
-    fn try_in_net(self, net: &IpNetwork) -> Option<IpAddr> {
+    fn try_in_net(&self, net: &IpNetwork) -> Option<IpAddr> {
         let ip = match self {
             Self::Ip(v) => v.try_in_net(net),
             Self::Mac(v) => v.try_in_net(net),
@@ -274,18 +273,6 @@ impl TryFrom<&Value> for HostOpt {
         warn!("unable to convert value to host opt: {:?}", v);
         Err(())
     }
-}
-
-fn net_to_real_nets(value: &Value) -> Vec<IpNetwork> {
-    let mut v = interfaces_from_selector(value)
-        .into_iter()
-        .map(|iface| iface.real_nets())
-        .flatten()
-        .inspect(|n| debug!("real net collected: {:?}", n))
-        .collect::<Vec<_>>();
-    v.sort();
-    v.dedup();
-    v
 }
 
 #[derive(Clone)]
@@ -416,24 +403,4 @@ fn interfaces_from_selector(value: &Value) -> Vec<NetworkInterface> {
     }
 
     Vec::new()
-}
-
-trait RealNets {
-    fn real_nets(&self) -> Vec<IpNetwork>;
-}
-
-impl RealNets for NetworkInterface {
-    fn real_nets(&self) -> Vec<IpNetwork> {
-        self.ips
-            .iter()
-            .filter(|ip| {
-                ip.ip().is_global()
-                    || match ip.ip() {
-                        IpAddr::V4(v4) => v4.is_private(),
-                        IpAddr::V6(v6) => v6.is_unique_local(),
-                    }
-            })
-            .filter_map(|ip| IpNetwork::with_netmask(ip.network(), ip.mask()).ok())
-            .collect()
-    }
 }

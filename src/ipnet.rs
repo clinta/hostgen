@@ -128,13 +128,13 @@ impl ToEUI64Mac for Ipv6Addr {
 }
 
 pub trait InNet<N, A> {
-    fn in_net(self, net: &N) -> A;
+    fn in_net(&self, net: &N) -> A;
 }
 
 impl InNet<Ipv6Network, Ipv6Addr> for Ipv6Addr {
-    fn in_net(self, net: &Ipv6Network) -> Self {
+    fn in_net(&self, net: &Ipv6Network) -> Self {
         int_in_net(
-            u128::from(self),
+            u128::from(*self),
             u128::from(net.network()),
             u128::from(net.mask()),
         )
@@ -143,9 +143,9 @@ impl InNet<Ipv6Network, Ipv6Addr> for Ipv6Addr {
 }
 
 impl InNet<Ipv4Network, Ipv4Addr> for Ipv4Addr {
-    fn in_net(self, net: &Ipv4Network) -> Self {
+    fn in_net(&self, net: &Ipv4Network) -> Self {
         int_in_net(
-            u32::from(self),
+            u32::from(*self),
             u32::from(net.network()),
             u32::from(net.mask()),
         )
@@ -154,31 +154,29 @@ impl InNet<Ipv4Network, Ipv4Addr> for Ipv4Addr {
 }
 
 impl InNet<Ipv6Network, Ipv6Addr> for Ipv4Addr {
-    fn in_net(self, net: &Ipv6Network) -> Ipv6Addr {
+    fn in_net(&self, net: &Ipv6Network) -> Ipv6Addr {
         self.to_ipv6_compatible().in_net(net)
     }
 }
 
 pub trait TryInNet<N, A> {
-    fn try_in_net(self, net: &N) -> Option<A>
-    where
-        A: std::marker::Sized;
+    fn try_in_net(&self, net: &N) -> Option<A>;
 }
 
 impl<N, A, S: InNet<N, A>> TryInNet<N, A> for S {
-    fn try_in_net(self, net: &N) -> Option<A> {
+    fn try_in_net(&self, net: &N) -> Option<A> {
         Some(self.in_net(net))
     }
 }
 
 impl TryInNet<Ipv4Network, Ipv4Addr> for Ipv6Addr {
-    fn try_in_net(self, net: &Ipv4Network) -> Option<Ipv4Addr> {
+    fn try_in_net(&self, net: &Ipv4Network) -> Option<Ipv4Addr> {
         self.to_ipv4().map(|v4| v4.in_net(net))
     }
 }
 
 impl TryInNet<IpNetwork, IpAddr> for Ipv4Addr {
-    fn try_in_net(self, net: &IpNetwork) -> Option<IpAddr> {
+    fn try_in_net(&self, net: &IpNetwork) -> Option<IpAddr> {
         match net {
             IpNetwork::V4(v4) => self.try_in_net(v4).map(|v4| IpAddr::V4(v4)),
             IpNetwork::V6(v6) => self.try_in_net(v6).map(|v6| IpAddr::V6(v6)),
@@ -187,7 +185,7 @@ impl TryInNet<IpNetwork, IpAddr> for Ipv4Addr {
 }
 
 impl TryInNet<IpNetwork, IpAddr> for Ipv6Addr {
-    fn try_in_net(self, net: &IpNetwork) -> Option<IpAddr> {
+    fn try_in_net(&self, net: &IpNetwork) -> Option<IpAddr> {
         match net {
             IpNetwork::V4(v4) => self.try_in_net(v4).map(|v4| IpAddr::V4(v4)),
             IpNetwork::V6(v6) => self.try_in_net(v6).map(|v6| IpAddr::V6(v6)),
@@ -196,7 +194,7 @@ impl TryInNet<IpNetwork, IpAddr> for Ipv6Addr {
 }
 
 impl TryInNet<IpNetwork, IpAddr> for IpAddr {
-    fn try_in_net(self, net: &IpNetwork) -> Option<IpAddr> {
+    fn try_in_net(&self, net: &IpNetwork) -> Option<IpAddr> {
         match self {
             IpAddr::V4(v4) => v4.try_in_net(net),
             IpAddr::V6(v6) => v6.try_in_net(net),
@@ -205,7 +203,7 @@ impl TryInNet<IpNetwork, IpAddr> for IpAddr {
 }
 
 impl InNet<IpNetwork, IpAddr> for MacAddr {
-    fn in_net(self, net: &IpNetwork) -> IpAddr {
+    fn in_net(&self, net: &IpNetwork) -> IpAddr {
         match net {
             IpNetwork::V6(v6net) => IpAddr::V6(self.to_eui64_ipv6().in_net(v6net)),
             IpNetwork::V4(v4net) => IpAddr::V4(self.to_ipv4().in_net(v4net)),
@@ -214,7 +212,7 @@ impl InNet<IpNetwork, IpAddr> for MacAddr {
 }
 
 impl InNet<IpNetwork, IpAddr> for u64 {
-    fn in_net(self, net: &IpNetwork) -> IpAddr {
+    fn in_net(&self, net: &IpNetwork) -> IpAddr {
         match net {
             IpNetwork::V6(v6net) => IpAddr::V6(self.to_ipv6().in_net(v6net)),
             IpNetwork::V4(v4net) => IpAddr::V4(self.to_ipv4().in_net(v4net)),
