@@ -4,12 +4,12 @@ use crate::ipnet::InNet;
 use crate::ipnet::ToMac;
 use crate::ipnet::TryInNet;
 use crate::ipnet::TryToMac;
-use std::convert::{TryFrom, From};
 use std::convert::TryInto;
+use std::convert::{From, TryFrom};
 
 use globset::Glob;
 use ipnetwork::IpNetwork;
-use log::{warn};
+use log::warn;
 use pnet::datalink::{interfaces, MacAddr, NetworkInterface};
 use serde_yaml::{Mapping, Value};
 use std::io::{self, Write};
@@ -153,15 +153,18 @@ struct Host {
 
 impl Host {
     fn new(name: &str, opts: &Value) -> Self {
-        Self{name: name.to_string(), opts: HostOpt::new_opts(opts)}
+        Self {
+            name: name.to_string(),
+            opts: HostOpt::new_opts(opts),
+        }
     }
 
     fn get_mac(&self, net: &InterfaceNetwork) -> Option<MacAddr> {
-        HostOpt::get_mac(&self.opts, net)
+        HostOpt::get_opts_mac(&self.opts, net)
     }
 
     fn get_ip(&self, net: &InterfaceNetwork) -> Option<IpAddr> {
-        HostOpt::get_ip(&self.opts, net)
+        HostOpt::get_opts_ip(&self.opts, net)
     }
 
     fn as_entry(&self, net: &InterfaceNetwork) -> Option<Entry> {
@@ -179,19 +182,87 @@ enum HostOpt {
     Int(u64),
     Mac(MacAddr),
     Ip(IpAddr),
+    Specific(SpecificOpt),
+}
+
+#[derive(Debug)]
+enum SpecificOpt {
+    Mac(Vec<HostOpt>),
+    Ipv4(Vec<HostOpt>),
+    Ipv6(Vec<HostOpt>),
+    Ip(Vec<HostOpt>),
     Iface(Value),
+}
+
+impl SpecificOpt {
+    fn try_new(k: &Value, v: &Value) -> Option<Self> {
+        match k.as_str().unwrap_or("").to_lowercase().as_ref() {
+            "mac" => Some(Self::Mac(HostOpt::new_opts(v))),
+            "v4" | "ip4" | "ipv4" => Some(Self::Ipv4(HostOpt::new_opts(v))),
+            "v6" | "ip6" | "ipv6" => Some(Self::Ipv6(HostOpt::new_opts(v))),
+            "ip" => Some(Self::Ip(HostOpt::new_opts(v))),
+            "iface" => Some(Self::Iface(v.clone())),
+            _ => None,
+        }
+    }
+
+    fn as_mac(&self) -> Option<&Vec<HostOpt>> {
+        match self {
+            Self::Mac(v) => Some(v),
+            _ => None,
+        }
+    }
+
+    fn as_ipv4(&self) -> Option<&Vec<HostOpt>> {
+        match self {
+            Self::Ipv4(v) => Some(v),
+            _ => None,
+        }
+    }
+
+    fn as_ipv6(&self) -> Option<&Vec<HostOpt>> {
+        match self {
+            Self::Ipv6(v) => Some(v),
+            _ => None,
+        }
+    }
+
+    fn as_ip(&self) -> Option<&Vec<HostOpt>> {
+        match self {
+            Self::Ip(v) => Some(v),
+            _ => None,
+        }
+    }
+
+    fn as_iface(&self) -> Option<&Value> {
+        match self {
+            Self::Iface(v) => Some(v),
+            _ => None,
+        }
+    }
 }
 
 impl HostOpt {
     fn new_opts(v: &Value) -> Vec<HostOpt> {
         if let Some(seq) = v.as_sequence() {
-            seq.iter().filter_map(|x| x.try_into().ok()).collect()
+            seq.iter().map(|x| Self::new_opts(x)).flatten().collect()
+        } else if let Some(map) = v.as_mapping() {
+            map.iter()
+                .filter_map(|(k, v)| SpecificOpt::try_new(k, v).map(|x| Self::Specific(x)))
+                .collect()
         } else {
             let mut r = Vec::new();
             if let Ok(opt) = v.try_into() {
                 r.push(opt);
             }
             r
+        }
+    }
+
+    fn as_specific(&self) -> Option<&SpecificOpt> {
+        match self {
+            Self::Specific(spec) => Some(spec),
+            _ => None,
         }
     }
 
@@ -217,43 +288,33 @@ impl HostOpt {
     }
 
     fn as_iface(&self, net: &InterfaceNetwork) -> Option<InterfaceNetwork> {
-        match self {
-            Self::Iface(v) => match v {
+        self.as_specific()
+            .and_then(|s| s.as_iface())
+            .and_then(|v| match v {
                 Value::Null => Some(net.clone()),
-                _ => {
-                    let r = InterfaceNetwork::filtered(v).first().cloned();
-                    r
-                }
-            },
-            _ => None,
-        }
+                _ => InterfaceNetwork::filtered(v).first().cloned(),
+            })
     }
 
-    fn get_mac(opts: &Vec<HostOpt>, net: &InterfaceNetwork) -> Option<MacAddr> {
-        opts
-            .iter()
+    fn get_opts_mac(opts: &Vec<HostOpt>, net: &InterfaceNetwork) -> Option<MacAddr> {
+        opts.iter()
             .filter_map(|o| o.as_mac().cloned()) // mac addresses
             .chain(
-                opts
-                    .iter()
+                opts.iter()
                     .filter_map(|o| o.as_iface(net).and_then(|iface| iface.iface.mac)), // mac address from iface
             )
             .chain(
-                opts
-                    .iter()
-                    .filter_map(|o| o.as_int().map(|i| i.to_mac())), // integers
+                opts.iter().filter_map(|o| o.as_int().map(|i| i.to_mac())), // integers
             )
             .chain(
-                opts
-                    .iter()
+                opts.iter()
                     .filter_map(|o| o.as_ip().and_then(|ip| ip.try_to_mac())), // ip addresses
             )
             .nth(0)
     }
 
-    fn get_ip(opts: &Vec<HostOpt>, net: &InterfaceNetwork) -> Option<IpAddr> {
-        opts
-            .iter()
+    fn get_opts_ip(opts: &Vec<HostOpt>, net: &InterfaceNetwork) -> Option<IpAddr> {
+        opts.iter()
             .filter_map(|o| o.as_ip().filter(|ip| net.network.contains(**ip)).cloned()) // ips directly in this network
             .chain(
                 opts.iter().filter_map(|o| {
@@ -285,28 +346,44 @@ impl HostOpt {
                 }), // iface ips
             )
             .chain(
-                opts
-                    .iter()
+                opts.iter()
                     .filter_map(|o| o.as_int().map(|i| i.to_mac().in_net(&net.network))), // ints as mac addresses
             )
             .chain(
-                opts
-                    .iter()
+                opts.iter()
                     .filter_map(|o| o.as_mac().map(|mac| mac.in_net(&net.network))), // mac addresses
             )
             .nth(0)
-        }
-}
+    }
 
-impl TryInNet<IpNetwork, IpAddr> for HostOpt {
-    fn try_in_net(&self, net: &IpNetwork) -> Option<IpAddr> {
+    fn ip_in_net(&self, net: &InterfaceNetwork) -> Option<IpAddr> {
         match self {
-            Self::Ip(v) => v.try_in_net(net),
-            Self::Mac(v) => v.try_in_net(net),
-            Self::Int(v) => v.try_in_net(net),
-            Self::Iface(v) => InterfaceNetwork::filtered(v)
-                .first()
-                .and_then(|n| n.network.ip().try_in_net(net)),
+            Self::Ip(v) => v.try_in_net(&net.network),
+            Self::Mac(v) => v.try_in_net(&net.network),
+            Self::Int(v) => v.try_in_net(&net.network),
+            Self::Specific(s) => match s {
+                SpecificOpt::Mac(v) => {
+                    HostOpt::get_opts_mac(v, net).and_then(|m| m.try_in_net(&net.network))
+                }
+                SpecificOpt::Ip(v) => HostOpt::get_opts_ip(v, net),
+                SpecificOpt::Ipv4(v) => {
+                    if net.network.is_ipv4() {
+                        HostOpt::get_opts_ip(v, net)
+                    } else {
+                        None
+                    }
+                }
+                SpecificOpt::Ipv6(v) => {
+                    if net.network.is_ipv6() {
+                        HostOpt::get_opts_ip(v, net)
+                    } else {
+                        None
+                    }
+                }
+                SpecificOpt::Iface(v) => InterfaceNetwork::filtered(v)
+                    .first()
+                    .and_then(|n| n.network.ip().try_in_net(&net.network)),
+            },
         }
     }
 }
@@ -315,7 +392,7 @@ impl TryFrom<&str> for HostOpt {
     type Error = ();
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         if s.to_lowercase() == "iface" {
-            return Ok(Self::Iface(Value::Null));
+            return Ok(Self::Specific(SpecificOpt::Iface(Value::Null)));
         }
 
         if let Ok(m) = s.parse::<MacAddr>() {
@@ -344,14 +421,6 @@ impl TryFrom<&Value> for HostOpt {
 
         if let Some(s) = v.as_str() {
             return s.try_into();
-        }
-
-        if let Some(selector) = v
-            .as_mapping()
-            .and_then(|m| m.get(&Value::String("iface".to_string())))
-        {
-            let r = Self::Iface(selector.clone());
-            return Ok(Self::Iface(selector.clone()));
         }
 
         warn!("unable to convert value to host opt: {:?}", v);
