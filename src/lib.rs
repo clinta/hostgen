@@ -100,7 +100,7 @@ impl<'a> Iterator for EntryIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         if let (Some(net), Some(host)) = (self.next_network(), self.host.as_ref()) {
-            host.as_entry(&net.network)
+            host.as_entry(&net)
         } else {
             self.host = Some(self.next_host()?);
             self.networks_iter = Some(self.networks.clone().into_iter());
@@ -149,10 +149,15 @@ struct Host {
 }
 
 impl Host {
-    fn get_mac(&self) -> Option<MacAddr> {
+    fn get_mac(&self, net: &InterfaceNetwork) -> Option<MacAddr> {
         self.opts
             .iter()
             .filter_map(|o| o.as_mac().cloned()) // mac addresses
+            .chain(
+                self.opts
+                    .iter()
+                    .filter_map(|o| o.as_iface(net).and_then(|iface| iface.iface.mac)), // mac address from iface
+            )
             .chain(
                 self.opts
                     .iter()
@@ -166,42 +171,68 @@ impl Host {
             .nth(0)
     }
 
-    fn get_ip(&self, net: &IpNetwork) -> Option<IpAddr> {
+    fn get_ip(&self, net: &InterfaceNetwork) -> Option<IpAddr> {
         self.opts
             .iter()
-            .filter_map(|o| o.as_ip().filter(|ip| net.contains(**ip)).cloned()) // ips directly in this network
+            .filter_map(|o| o.as_ip().filter(|ip| net.network.contains(**ip)).cloned()) // ips directly in this network
             .chain(
-                self.opts
-                    .iter()
-                    .filter_map(|o| o.as_ip().filter(|ip| net.is_ipv4() == ip.is_ipv4()).and_then(|ip| ip.try_in_net(net))) // ips of same family
+                self.opts.iter().filter_map(|o| {
+                    o.as_ip()
+                        .filter(|ip| net.network.is_ipv4() == ip.is_ipv4())
+                        .and_then(|ip| ip.try_in_net(&net.network))
+                }), // ips of same family
+            )
+            .chain(
+                self.opts.iter().filter_map(|o| {
+                    o.as_iface(net)
+                        .map(|iface| iface.network.ip())
+                        .filter(|ip| net.network.contains(*ip))
+                }), // iface ips directly in this network
+            )
+            .chain(
+                self.opts.iter().filter_map(|o| {
+                    o.as_iface(net)
+                        .map(|iface| iface.network.ip())
+                        .filter(|ip| ip.is_ipv4() == net.network.is_ipv4())
+                        .and_then(|ip| ip.try_in_net(&net.network))
+                }), // iface ips of same family
+            )
+            .chain(
+                self.opts.iter().filter_map(|o| {
+                    o.as_iface(net)
+                        .map(|iface| iface.network.ip())
+                        .and_then(|ip| ip.try_in_net(&net.network))
+                }), // iface ips
             )
             .chain(
                 self.opts
                     .iter()
-                    .filter_map(|o| o.as_int().map(|i| i.to_mac().in_net(net))), // ints as mac addresses
+                    .filter_map(|o| o.as_int().map(|i| i.to_mac().in_net(&net.network))), // ints as mac addresses
             )
             .chain(
                 self.opts
                     .iter()
-                    .filter_map(|o| o.as_mac().map(|mac| mac.in_net(net))), // mac addresses
+                    .filter_map(|o| o.as_mac().map(|mac| mac.in_net(&net.network))), // mac addresses
             )
             .nth(0)
     }
 
-    fn as_entry(&self, net: &IpNetwork) -> Option<Entry> {
+    fn as_entry(&self, net: &InterfaceNetwork) -> Option<Entry> {
         let ip = self.get_ip(net)?;
         Some(Entry {
             name: self.name.clone(),
-            mac: self.get_mac(),
+            mac: self.get_mac(net),
             ip: ip,
         })
     }
 }
 
+#[derive(Debug)]
 enum HostOpt {
     Int(u64),
     Mac(MacAddr),
     Ip(IpAddr),
+    Iface(Value),
 }
 
 impl HostOpt {
@@ -225,23 +256,42 @@ impl HostOpt {
             _ => None,
         }
     }
+
+    fn as_iface(&self, net: &InterfaceNetwork) -> Option<InterfaceNetwork> {
+        match self {
+            Self::Iface(v) => match v {
+                Value::Null => Some(net.clone()),
+                _ => {
+                    let r = InterfaceNetwork::filtered(v).first().cloned();
+                    println!("r: {:?}", r);
+                    r
+                }
+            },
+            _ => None,
+        }
+    }
 }
 
 impl TryInNet<IpNetwork, IpAddr> for HostOpt {
     fn try_in_net(&self, net: &IpNetwork) -> Option<IpAddr> {
-        let ip = match self {
+        match self {
             Self::Ip(v) => v.try_in_net(net),
             Self::Mac(v) => v.try_in_net(net),
             Self::Int(v) => v.try_in_net(net),
-        };
-        debug!("returning ip: {:?}", ip);
-        ip
+            Self::Iface(v) => InterfaceNetwork::filtered(v)
+                .first()
+                .and_then(|n| n.network.ip().try_in_net(net)),
+        }
     }
 }
 
 impl TryFrom<&str> for HostOpt {
     type Error = ();
     fn try_from(s: &str) -> Result<Self, Self::Error> {
+        if s.to_lowercase() == "iface" {
+            return Ok(Self::Iface(Value::Null));
+        }
+
         if let Ok(m) = s.parse::<MacAddr>() {
             return Ok(Self::Mac(m));
         }
@@ -270,12 +320,21 @@ impl TryFrom<&Value> for HostOpt {
             return s.try_into();
         }
 
+        if let Some(selector) = v
+            .as_mapping()
+            .and_then(|m| m.get(&Value::String("iface".to_string())))
+        {
+            let r = Self::Iface(selector.clone());
+            println!("r: {:?}", r);
+            return Ok(Self::Iface(selector.clone()));
+        }
+
         warn!("unable to convert value to host opt: {:?}", v);
         Err(())
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct InterfaceNetwork {
     iface: NetworkInterface,
     network: IpNetwork,
@@ -298,10 +357,12 @@ impl InterfaceNetwork {
     }
 
     fn filtered(selector: &Value) -> Vec<Self> {
+        println!("filtered");
         Self::filter_networks(&Self::all(), selector)
     }
 
     fn filter_networks(networks: &Vec<Self>, selector: &Value) -> Vec<Self> {
+        println!("filtering from {:?}", networks);
         if let Some(seq) = selector.as_sequence() {
             return seq
                 .iter()
@@ -314,10 +375,7 @@ impl InterfaceNetwork {
             return map
                 .iter()
                 .map(|(selector, filter)| {
-                    Self::filter_networks(
-                        &Self::filter_networks(networks, selector),
-                        filter,
-                    )
+                    Self::filter_networks(&Self::filter_networks(networks, selector), filter)
                 })
                 .flatten()
                 .collect();
@@ -359,6 +417,7 @@ impl InterfaceNetwork {
             }
 
             if let Ok(glob) = Glob::new(s) {
+                println!("it's a glob");
                 let glob = glob.compile_matcher();
                 return networks
                     .into_iter()
