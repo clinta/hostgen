@@ -429,9 +429,9 @@ impl TryFrom<&Value> for HostOpt {
 }
 
 #[derive(Debug, Clone)]
-struct InterfaceNetwork {
-    iface: NetworkInterface,
-    network: IpNetwork,
+pub struct InterfaceNetwork {
+    pub iface: NetworkInterface,
+    pub network: IpNetwork,
 }
 
 impl InterfaceNetwork {
