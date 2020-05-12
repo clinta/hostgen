@@ -377,30 +377,3 @@ impl InterfaceNetwork {
         Vec::new()
     }
 }
-
-fn interfaces_from_selector(value: &Value) -> Vec<NetworkInterface> {
-    if let Some(i) = value.as_u64().and_then(|x| u32::try_from(x).ok()) {
-        return interfaces().into_iter().filter(|x| x.index == i).collect();
-    }
-
-    if let Some(s) = value.as_str() {
-        if let Ok(net) = s.parse::<IpNetwork>() {
-            return interfaces()
-                .into_iter()
-                .filter(|x| x.ips.iter().any(|ip| net.contains(ip.ip())))
-                .collect();
-        }
-
-        if let Ok(glob) = Glob::new(s) {
-            let glob = glob.compile_matcher();
-            return interfaces()
-                .into_iter()
-                .filter(|x| glob.is_match(&x.name))
-                .collect();
-        }
-
-        return interfaces().into_iter().filter(|x| x.name == s).collect();
-    }
-
-    Vec::new()
-}
