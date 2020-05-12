@@ -1,9 +1,9 @@
 #![feature(ip)]
 
-use crate::ipnet::TryToMac;
-use crate::ipnet::TryInNet;
 use crate::ipnet::InNet;
 use crate::ipnet::ToMac;
+use crate::ipnet::TryInNet;
+use crate::ipnet::TryToMac;
 use std::convert::TryFrom;
 use std::convert::TryInto;
 
@@ -13,7 +13,7 @@ use log::{debug, warn};
 use pnet::datalink::{interfaces, MacAddr, NetworkInterface};
 use serde_yaml::{Mapping, Value};
 use std::io::{self, Write};
-use std::net::{IpAddr};
+use std::net::IpAddr;
 use tabwriter::TabWriter;
 
 pub mod ipnet;
@@ -171,16 +171,20 @@ impl Host {
             .iter()
             .filter_map(|o| o.as_ip().filter(|ip| net.contains(**ip)).cloned()) // ips directly in this network
             .chain(
-                self.opts.iter().filter_map(|o| {
-                    o.as_ip()
-                        .filter(|ip| net.is_ipv4() == ip.is_ipv4())
-                }).cloned(), // ips of same family
+                self.opts
+                    .iter()
+                    .filter_map(|o| o.as_ip().filter(|ip| net.is_ipv4() == ip.is_ipv4()))
+                    .cloned(), // ips of same family
             )
             .chain(
-                self.opts.iter().filter_map(|o| o.as_int().map(|i| i.to_mac().in_net(net))), // ints as mac addresses
+                self.opts
+                    .iter()
+                    .filter_map(|o| o.as_int().map(|i| i.to_mac().in_net(net))), // ints as mac addresses
             )
             .chain(
-                self.opts.iter().filter_map(|o| o.as_mac().map(|mac| mac.in_net(net))), // mac addresses
+                self.opts
+                    .iter()
+                    .filter_map(|o| o.as_mac().map(|mac| mac.in_net(net))), // mac addresses
             )
             .nth(0)
     }
@@ -273,7 +277,7 @@ impl TryFrom<&Value> for HostOpt {
 }
 
 fn net_to_real_nets(value: &Value) -> Vec<IpNetwork> {
-    let mut v = net_to_ifaces(value)
+    let mut v = interfaces_from_selector(value)
         .into_iter()
         .map(|iface| iface.real_nets())
         .flatten()
@@ -284,7 +288,110 @@ fn net_to_real_nets(value: &Value) -> Vec<IpNetwork> {
     v
 }
 
-fn net_to_ifaces(value: &Value) -> Vec<NetworkInterface> {
+#[derive(Clone)]
+struct InterfaceNetwork {
+    iface: NetworkInterface,
+    network: IpNetwork,
+}
+
+impl InterfaceNetwork {
+    fn new(iface: NetworkInterface, network: IpNetwork) -> Self {
+        Self { iface, network }
+    }
+    fn all() -> Vec<Self> {
+        interfaces()
+            .iter()
+            .map(|i| {
+                i.ips
+                    .iter()
+                    .map(move |net| Self::new(i.clone(), net.clone()))
+            })
+            .flatten()
+            .collect()
+    }
+
+    fn filtered(selector: &Value) -> Vec<Self> {
+        Self::filter_networks(&Self::all(), selector)
+    }
+
+    fn filter_networks(networks: &Vec<Self>, selector: &Value) -> Vec<Self> {
+        if let Some(seq) = selector.as_sequence() {
+            return seq
+                .iter()
+                .map(|v| Self::filter_networks(networks, v))
+                .flatten()
+                .collect();
+        }
+
+        if let Some(map) = selector.as_mapping() {
+            return map
+                .iter()
+                .map(|(selector, filter)| {
+                    Self::filter_networks(
+                        &Self::filter_networks(networks, selector),
+                        filter,
+                    )
+                })
+                .flatten()
+                .collect();
+        }
+
+        if let Some(i) = selector.as_u64().and_then(|x| u32::try_from(x).ok()) {
+            return networks
+                .into_iter()
+                .filter(|x| x.iface.index == i)
+                .cloned()
+                .collect();
+        }
+
+        if let Some(s) = selector.as_str() {
+            match s.to_lowercase().as_ref() {
+                "v4" | "ip4" | "ipv4" => {
+                    return networks
+                        .into_iter()
+                        .filter(|x| x.network.is_ipv4())
+                        .cloned()
+                        .collect()
+                }
+                "v6" | "ip6" | "ipv6" => {
+                    return networks
+                        .into_iter()
+                        .filter(|x| x.network.is_ipv6())
+                        .cloned()
+                        .collect()
+                }
+                _ => {}
+            };
+
+            if let Ok(net) = s.parse::<IpNetwork>() {
+                return networks
+                    .into_iter()
+                    .filter(|x| net.contains(x.network.ip()))
+                    .cloned()
+                    .collect();
+            }
+
+            if let Ok(glob) = Glob::new(s) {
+                let glob = glob.compile_matcher();
+                return networks
+                    .into_iter()
+                    .filter(|x| glob.is_match(&x.iface.name))
+                    .cloned()
+                    .collect();
+            }
+
+            return networks
+                .into_iter()
+                .filter(|x| x.iface.name == s)
+                .cloned()
+                .collect();
+        }
+
+        Vec::new()
+    }
+}
+
+fn interfaces_from_selector(value: &Value) -> Vec<NetworkInterface> {
     if let Some(i) = value.as_u64().and_then(|x| u32::try_from(x).ok()) {
         return interfaces().into_iter().filter(|x| x.index == i).collect();
     }
