@@ -45,19 +45,6 @@ impl TryFrom<(&Value, &Value)> for Label {
     }
 }
 
-impl From<&u64> for Opt {
-    fn from(i: &u64) -> Self {
-        Self::Int(*i)
-    }
-}
-
-impl TryFrom<&str> for Opt {
-    type Error = ();
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
-        Err(())
-    }
-}
-
 impl Opt {
     fn opts_from_vals(val: &Value) -> Vec<Opt> {
         if let Some(s) = val.as_sequence() {
