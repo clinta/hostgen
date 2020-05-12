@@ -4,7 +4,7 @@ use crate::ipnet::InNet;
 use crate::ipnet::ToMac;
 use crate::ipnet::TryInNet;
 use crate::ipnet::TryToMac;
-use std::convert::TryFrom;
+use std::convert::{TryFrom, From};
 use std::convert::TryInto;
 
 use globset::Glob;
@@ -77,11 +77,8 @@ impl<'a> EntryIterator<'a> {
 
     fn next_host(&mut self) -> Option<Host> {
         if let Some((host, host_opts)) = self.next_host_val() {
-            if let (Some(host), Some(host_opts)) = (host.as_str(), host_opts.as_sequence()) {
-                Some(Host {
-                    name: host.to_string(),
-                    opts: host_opts.iter().filter_map(|x| x.try_into().ok()).collect(),
-                })
+            if let Some(host) = host.as_str() {
+                Some(Host::new(host, host_opts))
             } else {
                 warn!("invalid host name or opts: {:?}: {:?}", host, host_opts);
                 self.next_host()
@@ -155,6 +152,10 @@ struct Host {
 }
 
 impl Host {
+    fn new(name: &str, opts: &Value) -> Self {
+        Self{name: name.to_string(), opts: HostOpt::new_opts(opts)}
+    }
+
     fn get_mac(&self, net: &InterfaceNetwork) -> Option<MacAddr> {
         self.opts
             .iter()
@@ -242,6 +243,18 @@ enum HostOpt {
 }
 
 impl HostOpt {
+    fn new_opts(v: &Value) -> Vec<HostOpt> {
+        if let Some(seq) = v.as_sequence() {
+            seq.iter().filter_map(|x| x.try_into().ok()).collect()
+        } else {
+            let mut r = Vec::new();
+            if let Ok(opt) = v.try_into() {
+                r.push(opt);
+            }
+            r
+        }
+    }
+
     fn as_mac(&self) -> Option<&MacAddr> {
         match self {
             Self::Mac(mac) => Some(mac),
