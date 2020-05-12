@@ -157,71 +157,11 @@ impl Host {
     }
 
     fn get_mac(&self, net: &InterfaceNetwork) -> Option<MacAddr> {
-        self.opts
-            .iter()
-            .filter_map(|o| o.as_mac().cloned()) // mac addresses
-            .chain(
-                self.opts
-                    .iter()
-                    .filter_map(|o| o.as_iface(net).and_then(|iface| iface.iface.mac)), // mac address from iface
-            )
-            .chain(
-                self.opts
-                    .iter()
-                    .filter_map(|o| o.as_int().map(|i| i.to_mac())), // integers
-            )
-            .chain(
-                self.opts
-                    .iter()
-                    .filter_map(|o| o.as_ip().and_then(|ip| ip.try_to_mac())), // ip addresses
-            )
-            .nth(0)
+        HostOpt::get_mac(&self.opts, net)
     }
 
     fn get_ip(&self, net: &InterfaceNetwork) -> Option<IpAddr> {
-        self.opts
-            .iter()
-            .filter_map(|o| o.as_ip().filter(|ip| net.network.contains(**ip)).cloned()) // ips directly in this network
-            .chain(
-                self.opts.iter().filter_map(|o| {
-                    o.as_ip()
-                        .filter(|ip| net.network.is_ipv4() == ip.is_ipv4())
-                        .and_then(|ip| ip.try_in_net(&net.network))
-                }), // ips of same family
-            )
-            .chain(
-                self.opts.iter().filter_map(|o| {
-                    o.as_iface(net)
-                        .map(|iface| iface.network.ip())
-                        .filter(|ip| net.network.contains(*ip))
-                }), // iface ips directly in this network
-            )
-            .chain(
-                self.opts.iter().filter_map(|o| {
-                    o.as_iface(net)
-                        .map(|iface| iface.network.ip())
-                        .filter(|ip| ip.is_ipv4() == net.network.is_ipv4())
-                        .and_then(|ip| ip.try_in_net(&net.network))
-                }), // iface ips of same family
-            )
-            .chain(
-                self.opts.iter().filter_map(|o| {
-                    o.as_iface(net)
-                        .map(|iface| iface.network.ip())
-                        .and_then(|ip| ip.try_in_net(&net.network))
-                }), // iface ips
-            )
-            .chain(
-                self.opts
-                    .iter()
-                    .filter_map(|o| o.as_int().map(|i| i.to_mac().in_net(&net.network))), // ints as mac addresses
-            )
-            .chain(
-                self.opts
-                    .iter()
-                    .filter_map(|o| o.as_mac().map(|mac| mac.in_net(&net.network))), // mac addresses
-            )
-            .nth(0)
+        HostOpt::get_ip(&self.opts, net)
     }
 
     fn as_entry(&self, net: &InterfaceNetwork) -> Option<Entry> {
@@ -288,6 +228,74 @@ impl HostOpt {
             _ => None,
         }
     }
+
+    fn get_mac(opts: &Vec<HostOpt>, net: &InterfaceNetwork) -> Option<MacAddr> {
+        opts
+            .iter()
+            .filter_map(|o| o.as_mac().cloned()) // mac addresses
+            .chain(
+                opts
+                    .iter()
+                    .filter_map(|o| o.as_iface(net).and_then(|iface| iface.iface.mac)), // mac address from iface
+            )
+            .chain(
+                opts
+                    .iter()
+                    .filter_map(|o| o.as_int().map(|i| i.to_mac())), // integers
+            )
+            .chain(
+                opts
+                    .iter()
+                    .filter_map(|o| o.as_ip().and_then(|ip| ip.try_to_mac())), // ip addresses
+            )
+            .nth(0)
+    }
+
+    fn get_ip(opts: &Vec<HostOpt>, net: &InterfaceNetwork) -> Option<IpAddr> {
+        opts
+            .iter()
+            .filter_map(|o| o.as_ip().filter(|ip| net.network.contains(**ip)).cloned()) // ips directly in this network
+            .chain(
+                opts.iter().filter_map(|o| {
+                    o.as_ip()
+                        .filter(|ip| net.network.is_ipv4() == ip.is_ipv4())
+                        .and_then(|ip| ip.try_in_net(&net.network))
+                }), // ips of same family
+            )
+            .chain(
+                opts.iter().filter_map(|o| {
+                    o.as_iface(net)
+                        .map(|iface| iface.network.ip())
+                        .filter(|ip| net.network.contains(*ip))
+                }), // iface ips directly in this network
+            )
+            .chain(
+                opts.iter().filter_map(|o| {
+                    o.as_iface(net)
+                        .map(|iface| iface.network.ip())
+                        .filter(|ip| ip.is_ipv4() == net.network.is_ipv4())
+                        .and_then(|ip| ip.try_in_net(&net.network))
+                }), // iface ips of same family
+            )
+            .chain(
+                opts.iter().filter_map(|o| {
+                    o.as_iface(net)
+                        .map(|iface| iface.network.ip())
+                        .and_then(|ip| ip.try_in_net(&net.network))
+                }), // iface ips
+            )
+            .chain(
+                opts
+                    .iter()
+                    .filter_map(|o| o.as_int().map(|i| i.to_mac().in_net(&net.network))), // ints as mac addresses
+            )
+            .chain(
+                opts
+                    .iter()
+                    .filter_map(|o| o.as_mac().map(|mac| mac.in_net(&net.network))), // mac addresses
+            )
+            .nth(0)
+        }
 }
 
 impl TryInNet<IpNetwork, IpAddr> for HostOpt {
