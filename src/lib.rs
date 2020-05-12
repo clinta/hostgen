@@ -9,7 +9,7 @@ use std::convert::TryInto;
 
 use globset::Glob;
 use ipnetwork::IpNetwork;
-use log::{debug, warn};
+use log::{warn};
 use pnet::datalink::{interfaces, MacAddr, NetworkInterface};
 use serde_yaml::{Mapping, Value};
 use std::io::{self, Write};
@@ -100,7 +100,11 @@ impl<'a> Iterator for EntryIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         if let (Some(net), Some(host)) = (self.next_network(), self.host.as_ref()) {
-            host.as_entry(&net)
+            if let Some(entry) = host.as_entry(&net) {
+                Some(entry)
+            } else {
+                self.next() // go to next network is None due to bad network -> ip
+            }
         } else {
             self.host = Some(self.next_host()?);
             self.networks_iter = Some(self.networks.clone().into_iter());
@@ -109,6 +113,7 @@ impl<'a> Iterator for EntryIterator<'a> {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Entry {
     name: String,
     mac: Option<MacAddr>,
@@ -143,6 +148,7 @@ impl Entry {
     }
 }
 
+#[derive(Debug)]
 struct Host {
     name: String,
     opts: Vec<HostOpt>,
@@ -263,7 +269,6 @@ impl HostOpt {
                 Value::Null => Some(net.clone()),
                 _ => {
                     let r = InterfaceNetwork::filtered(v).first().cloned();
-                    println!("r: {:?}", r);
                     r
                 }
             },
@@ -325,7 +330,6 @@ impl TryFrom<&Value> for HostOpt {
             .and_then(|m| m.get(&Value::String("iface".to_string())))
         {
             let r = Self::Iface(selector.clone());
-            println!("r: {:?}", r);
             return Ok(Self::Iface(selector.clone()));
         }
 
@@ -357,12 +361,10 @@ impl InterfaceNetwork {
     }
 
     fn filtered(selector: &Value) -> Vec<Self> {
-        println!("filtered");
         Self::filter_networks(&Self::all(), selector)
     }
 
     fn filter_networks(networks: &Vec<Self>, selector: &Value) -> Vec<Self> {
-        println!("filtering from {:?}", networks);
         if let Some(seq) = selector.as_sequence() {
             return seq
                 .iter()
@@ -417,7 +419,6 @@ impl InterfaceNetwork {
             }
 
             if let Ok(glob) = Glob::new(s) {
-                println!("it's a glob");
                 let glob = glob.compile_matcher();
                 return networks
                     .into_iter()
