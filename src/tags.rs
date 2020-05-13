@@ -19,20 +19,16 @@ impl Tags {
         let mut r = self.clone();
         for v in Self::new(val) {
             if v.chars().nth(0).filter(|c| c == &'!').is_some() {
-                r.remove(&v.chars().skip(1).collect());
+                r.0.remove(v[1..]);
             } else {
-                r.insert(v);
+                r.0.insert(v);
             }
         }
         r
     }
 
-    fn insert(&mut self, v: String) -> bool {
-        self.0.insert(v)
-    }
-
-    fn remove(&mut self, v: &String) -> bool {
-        self.0.remove(v)
+    pub fn contains(&self, v: &String) -> bool {
+        self.0.contains(v)
     }
 }
 
