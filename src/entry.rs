@@ -33,11 +33,28 @@ impl Entry {
     }
 
     pub fn as_dnsmasq(&self) -> String {
-        todo!()
+        let mut elems = Vec::new();
+        if let Some(mac) = self.mac {
+            elems.push(mac.to_string());
+        }
+        if self.ip.is_ipv6() {
+            elems.push("[".to_string() + &self.ip.to_string() + "]");
+        } else {
+            elems.push(self.ip.to_string());
+        }
+        elems.push(self.name.to_string());
+        elems.join(",")
     }
 
     pub fn as_zone_entry(&self) -> String {
-        todo!()
+        let mut elems = vec!(self.name.to_string());
+        if self.ip.is_ipv6() {
+            elems.push("AAAA".to_string());
+        } else {
+            elems.push("A".to_string());
+        }
+        elems.push(self.ip.to_string());
+        elems.join("\t")
     }
 }
 
