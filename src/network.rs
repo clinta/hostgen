@@ -132,7 +132,6 @@ impl InterfaceNetwork {
 
             return networks
                 .into_iter()
-                //.filter(|x| x.iface.name == s)
                 .filter(|x| x.iface.as_ref().filter(|iface| iface.name == s).is_some())
                 .cloned()
                 .collect();
