@@ -19,7 +19,7 @@ impl Tags {
         let mut r = self.clone();
         for v in Self::new(val) {
             if v.chars().nth(0).filter(|c| c == &'!').is_some() {
-                r.0.remove(v[1..]);
+                r.0.remove(&v[1..]);
             } else {
                 r.0.insert(v);
             }
