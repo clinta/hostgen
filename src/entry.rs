@@ -32,7 +32,7 @@ impl Entry {
         }
     }
 
-    pub fn as_dnsmasq(&self) -> String {
+    pub fn as_dnsmasq_entry(&self) -> String {
         let mut elems = Vec::new();
         if let Some(mac) = self.mac {
             elems.push(mac.to_string());
@@ -47,7 +47,7 @@ impl Entry {
     }
 
     pub fn as_zone_entry(&self) -> String {
-        let mut elems = vec!(self.name.to_string());
+        let mut elems = vec![self.name.to_string()];
         if self.ip.is_ipv6() {
             elems.push("AAAA".to_string());
         } else {
@@ -55,6 +55,59 @@ impl Entry {
         }
         elems.push(self.ip.to_string());
         elems.join("\t")
+    }
+}
+
+pub trait EntryIterator
+where
+    Self: Iterator<Item = Entry> + Sized,
+{
+    fn as_dnsmasq_reservations(self) -> FormattedEntries<Self> {
+        FormattedEntries::DnsmasqReservations(self)
+    }
+
+    fn as_zone_records(self) -> FormattedEntries<Self> {
+        FormattedEntries::ZoneRecords(self)
+    }
+}
+
+impl<I: Iterator<Item = Entry> + Sized> EntryIterator for I {}
+
+pub enum FormattedEntries<I: Iterator<Item = Entry> + Sized> {
+    DnsmasqReservations(I),
+    ZoneRecords(I),
+}
+
+impl<I: Iterator<Item = Entry> + Sized> FormattedEntries<I> {
+    pub fn write<W: io::Write>(self, w: &mut W) -> std::io::Result<()> {
+        match self {
+            Self::DnsmasqReservations(_) => self.raw_write(w),
+            Self::ZoneRecords(_) => {
+                let mut w = TabWriter::new(w);
+                self.raw_write(&mut w)?;
+                w.flush()
+            }
+        }
+    }
+    fn raw_write<W: io::Write>(self, w: &mut W) -> std::io::Result<()> {
+        for s in self {
+            writeln!(w, "{}", s)?;
+        }
+        Ok(())
+    }
+}
+
+impl<I: Iterator<Item = Entry> + Sized> IntoIterator for FormattedEntries<I> {
+
+    type Item = String;
+
+    type IntoIter = std::iter::Map<I, fn(I::Item) -> String>;
+    
+    fn into_iter(self) -> Self::IntoIter {
+        match self {
+            Self::DnsmasqReservations(i) => i.map(|e| e.as_dnsmasq_entry()),
+            Self::ZoneRecords(i) => i.map(|e| e.as_zone_entry()),
+        }
     }
 }
 
