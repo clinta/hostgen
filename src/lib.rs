@@ -17,6 +17,7 @@ use std::net::IpAddr;
 use tabwriter::TabWriter;
 
 pub mod ipnet;
+pub mod network;
 
 pub enum EntryWriteMode {
     DnsMasq,

@@ -1,9 +1,9 @@
+use hostgen::network::InterfaceNetwork;
 use globset::Glob;
 use hostgen::ipnet::InNet;
 use hostgen::ipnet::ToMac;
 use hostgen::ipnet::TryInNet;
 use hostgen::ipnet::TryToMac;
-use hostgen::InterfaceNetwork;
 use ipnetwork::IpNetwork;
 use log::warn;
 use pnet::datalink::{interfaces, MacAddr, NetworkInterface};
