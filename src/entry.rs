@@ -71,30 +71,3 @@ fn entries_from_map(map: Mapping) -> impl Iterator<Item = Entry> {
         })
     })
 }
-
-pub trait AsEntries {
-    fn as_entries(&self) -> Box<dyn Iterator<Item = Entry> + '_>;
-}
-
-impl AsEntries for Value {
-    fn as_entries(&self) -> Box<dyn Iterator<Item = Entry> + '_> {
-        match self {
-            Value::Sequence(seq) => Box::new(seq.iter().map(|v| v.as_entries()).flatten()),
-            Value::Mapping(map) => map.as_entries(),
-            _ => {
-                warn!("unable to convert to entries: {:?}", self);
-                Box::new(iter::empty())
-            }
-        }
-    }
-}
-
-impl AsEntries for Mapping {
-    fn as_entries(&self) -> Box<dyn Iterator<Item = Entry> + '_> {
-        self.iter().map(|(k, v)| {
-            let net = InterfaceNetwork::filtered(k);
-            ""
-        });
-        todo!()
-    }
-}
