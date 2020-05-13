@@ -1,12 +1,8 @@
-#![feature(ip)]
-
-use hostgen::entry::EntryIterator;
 use clap::{App, Arg, SubCommand};
+use hostgen::entry::{entries_from_val, EntryIterator};
 use serde_yaml::Value;
 use std::fs::File;
 use std::io::{self};
-use hostgen::entry;
-
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
@@ -38,7 +34,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let f = std::fs::File::open(matches.value_of("config").unwrap_or("hosts.yaml"))?;
     let data: Value = serde_yaml::from_reader(f)?;
 
-    let entries = entry::entries_from_val(data);
+    let entries = entries_from_val(data);
     let entries = {
         match matches.subcommand_name() {
             Some("dnsmasq") => entries.as_dnsmasq_reservations(),

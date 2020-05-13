@@ -1,17 +1,11 @@
+use crate::ipnet::{TryInNet, TryToMac};
+use crate::network::InterfaceNetwork;
 use ipnetwork::IpNetwork;
 use log::warn;
 use pnet::datalink::MacAddr;
-use serde_yaml::Mapping;
-use serde_yaml::Value;
+use serde_yaml::{Mapping, Value};
 use std::convert::TryFrom;
-use std::iter;
 use std::net::IpAddr;
-
-use crate::network::InterfaceNetwork;
-use crate::ipnet::InNet;
-use crate::ipnet::ToMac;
-use crate::ipnet::TryInNet;
-use crate::ipnet::TryToMac;
 
 pub struct Host {
     pub name: String,
@@ -103,16 +97,20 @@ impl TryFrom<(Value, Value)> for Label {
 impl Opt {
     fn opts_from_vals(val: Value) -> Vec<Opt> {
         match val {
-            Value::Sequence(s) => return s
-                .into_iter()
-                .map(|v| Self::opts_from_vals(v))
-                .flatten()
-                .collect(),
-            Value::Mapping(m) => return m
-                .into_iter()
-                .filter_map(|(k, v)| Label::try_from((k, v)).map(|l| Self::Labeled(l)).ok())
-                .collect(),
-            _ => {},
+            Value::Sequence(s) => {
+                return s
+                    .into_iter()
+                    .map(|v| Self::opts_from_vals(v))
+                    .flatten()
+                    .collect()
+            }
+            Value::Mapping(m) => {
+                return m
+                    .into_iter()
+                    .filter_map(|(k, v)| Label::try_from((k, v)).map(|l| Self::Labeled(l)).ok())
+                    .collect()
+            }
+            _ => {}
         };
 
         if let Some(i) = val.as_u64() {

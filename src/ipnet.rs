@@ -1,5 +1,5 @@
 use ipnetwork::{IpNetwork, Ipv4Network, Ipv6Network};
-use pnet::datalink::{MacAddr};
+use pnet::datalink::MacAddr;
 use std::convert::From;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 

@@ -1,19 +1,9 @@
-use crate::ipnet::InNet;
-use crate::ipnet::ToMac;
-use crate::ipnet::TryInNet;
-use crate::ipnet::TryToMac;
-use std::convert::TryInto;
-use std::convert::{From, TryFrom};
-
 use crate::hosts::Host;
 use crate::network::InterfaceNetwork;
-use globset::Glob;
-use ipnetwork::IpNetwork;
 use log::warn;
-use pnet::datalink::{interfaces, MacAddr, NetworkInterface};
+use pnet::datalink::MacAddr;
 use serde_yaml::{Mapping, Value};
 use std::io::{self, Write};
-use std::iter;
 use std::net::IpAddr;
 use tabwriter::TabWriter;
 
@@ -98,11 +88,9 @@ impl<I: Iterator<Item = Entry> + Sized> FormattedEntries<I> {
 }
 
 impl<I: Iterator<Item = Entry> + Sized> IntoIterator for FormattedEntries<I> {
-
     type Item = String;
 
     type IntoIter = std::iter::Map<I, fn(I::Item) -> String>;
-    
     fn into_iter(self) -> Self::IntoIter {
         match self {
             Self::DnsmasqReservations(i) => i.map(|e| e.as_dnsmasq_entry()),
