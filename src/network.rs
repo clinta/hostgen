@@ -18,6 +18,20 @@ impl InterfaceNetwork {
         }
     }
 
+    fn new_net_only(network: IpNetwork) -> Self {
+        Self {
+            iface: None,
+            network,
+        }
+    }
+    fn none_v4() -> Self {
+        Self::new_net_only("0.0.0.0/0".parse().unwrap())
+    }
+
+    fn none_v6() -> Self {
+        Self::new_net_only("::/0".parse().unwrap())
+    }
+
     fn all() -> Vec<Self> {
         interfaces()
             .iter()
@@ -51,6 +65,10 @@ impl InterfaceNetwork {
                 })
                 .flatten()
                 .collect();
+        }
+
+        if selector.is_null() {
+            return vec![Self::none_v4(), Self::none_v6()];
         }
 
         if let Some(i) = selector.as_u64().and_then(|x| u32::try_from(x).ok()) {
@@ -102,7 +120,12 @@ impl InterfaceNetwork {
                 let glob = glob.compile_matcher();
                 return networks
                     .into_iter()
-                    .filter(|x| x.iface.as_ref().filter(|iface| glob.is_match(&iface.name)).is_some())
+                    .filter(|x| {
+                        x.iface
+                            .as_ref()
+                            .filter(|iface| glob.is_match(&iface.name))
+                            .is_some()
+                    })
                     .cloned()
                     .collect();
             }
