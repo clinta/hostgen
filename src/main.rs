@@ -6,7 +6,6 @@ use serde_yaml::Mapping;
 use std::fs::File;
 use std::io::{self};
 
-mod hosts;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();

@@ -5,6 +5,7 @@ use crate::ipnet::TryToMac;
 use std::convert::TryInto;
 use std::convert::{From, TryFrom};
 
+use crate::hosts::Host;
 use crate::network::InterfaceNetwork;
 use globset::Glob;
 use ipnetwork::IpNetwork;
@@ -60,10 +61,19 @@ fn entries_from_seq(seq: serde_yaml::Sequence) -> impl Iterator<Item = Entry> {
 }
 
 fn entries_from_map(map: Mapping) -> impl Iterator<Item = Entry> {
-    map.into_iter().filter_map(|(k, v)| {
-        let nets = InterfaceNetwork::filtered(&k);
-        None
-    })
+    map.into_iter()
+        .map(|(k, v)| {
+            let nets = InterfaceNetwork::filtered(&k);
+            Host::new_hosts(v)
+                .map(move |h| {
+                    nets.clone().into_iter().filter_map(move |net| {
+                        let ip = h.get_ip(&net)?;
+                        Some(Entry::new(&h.name, h.get_mac(&net), ip))
+                    })
+                })
+                .flatten()
+        })
+        .flatten()
 }
 
 pub trait AsEntries {

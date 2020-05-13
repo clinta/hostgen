@@ -1,5 +1,3 @@
-use hostgen::ipnet::{TryInNet, TryToMac};
-use hostgen::network::InterfaceNetwork;
 use ipnetwork::IpNetwork;
 use log::warn;
 use pnet::datalink::MacAddr;
@@ -8,6 +6,12 @@ use serde_yaml::Value;
 use std::convert::TryFrom;
 use std::iter;
 use std::net::IpAddr;
+
+use crate::network::InterfaceNetwork;
+use crate::ipnet::InNet;
+use crate::ipnet::ToMac;
+use crate::ipnet::TryInNet;
+use crate::ipnet::TryToMac;
 
 pub struct Host {
     pub name: String,
@@ -55,7 +59,7 @@ impl Host {
         Opt::get_mac(&self.opts, net)
     }
 
-    pub fn ip(&self, net: &InterfaceNetwork) -> Option<IpAddr> {
+    pub fn get_ip(&self, net: &InterfaceNetwork) -> Option<IpAddr> {
         Opt::get_ip(&self.opts, net)
     }
 }
