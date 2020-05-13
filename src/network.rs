@@ -4,7 +4,7 @@ use pnet::datalink::{interfaces, NetworkInterface};
 use serde_yaml::Value;
 use std::convert::TryFrom;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct InterfaceNetwork {
     pub iface: NetworkInterface,
     pub network: IpNetwork,
@@ -59,6 +59,16 @@ impl InterfaceNetwork {
         }
 
         if let Some(s) = selector.as_str() {
+            if s.chars().nth(0).filter(|c| c == &'!').is_some() {
+                let exclude_selector = Value::String(s.chars().skip(1).collect());
+                let excludes = &Self::filter_networks(networks, &exclude_selector);
+                return networks
+                    .into_iter()
+                    .filter(|n| !excludes.contains(n))
+                    .cloned()
+                    .collect();
+            }
+
             match s.to_lowercase().as_ref() {
                 "v4" | "ip4" | "ipv4" => {
                     return networks
