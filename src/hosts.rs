@@ -158,7 +158,7 @@ impl Opt {
             .chain(opts.iter().filter_map(|o| {
                 // interfaces
                 match o {
-                    Self::Iface => net.iface.mac,
+                    Self::Iface => net.iface.as_ref().and_then(|i| i.mac),
                     _ => None,
                 }
             }))
