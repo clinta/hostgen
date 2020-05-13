@@ -7,7 +7,11 @@ use std::iter::{once, FromIterator};
 pub struct Tags(HashSet<String>);
 
 impl Tags {
-    pub fn new(val: &Value) -> Self {
+    pub fn new() -> Self {
+        Self(HashSet::new())
+    }
+
+    fn from_val(val: &Value) -> Self {
         if let Some(seq) = val.as_sequence() {
             seq.iter().cloned().collect()
         } else {
@@ -17,7 +21,7 @@ impl Tags {
 
     pub fn new_child(&self, val: &Value) -> Self {
         let mut r = self.clone();
-        for v in Self::new(val) {
+        for v in Self::from_val(val) {
             if v.chars().nth(0).filter(|c| c == &'!').is_some() {
                 r.0.remove(&v[1..]);
             } else {
