@@ -1,22 +1,13 @@
+use hostgen::ipnet::{TryInNet, TryToMac};
 use hostgen::network::InterfaceNetwork;
-use globset::Glob;
-use hostgen::ipnet::InNet;
-use hostgen::ipnet::ToMac;
-use hostgen::ipnet::TryInNet;
-use hostgen::ipnet::TryToMac;
 use ipnetwork::IpNetwork;
 use log::warn;
-use pnet::datalink::{interfaces, MacAddr, NetworkInterface};
-use serde_yaml::{Mapping, Value};
-use std::convert::TryInto;
-use std::convert::{From, TryFrom};
-use std::io::{self, Write};
+use pnet::datalink::MacAddr;
+use serde_yaml::Mapping;
+use serde_yaml::Value;
+use std::convert::TryFrom;
 use std::iter;
-use std::iter::FromIterator;
 use std::net::IpAddr;
-use std::net::Ipv4Addr;
-use std::net::Ipv6Addr;
-use tabwriter::TabWriter;
 
 pub struct Host {
     pub name: String,
@@ -24,11 +15,40 @@ pub struct Host {
 }
 
 impl Host {
-    pub fn new(name: &str, opts: &Value) -> Self {
+    pub fn new(name: String, opts: Value) -> Self {
         Self {
             name: name.to_string(),
             opts: Opt::opts_from_vals(opts),
         }
+    }
+
+    pub fn new_hosts(val: Value) -> impl Iterator<Item = Self> {
+        match val {
+            Value::Sequence(seq) => Self::new_hosts_from_seq(seq),
+            _ => Self::new_hosts_from_seq(vec![val]),
+        }
+    }
+
+    fn new_hosts_from_seq(seq: serde_yaml::Sequence) -> impl Iterator<Item = Self> {
+        seq.into_iter()
+            .filter_map(|v| match v {
+                Value::Mapping(map) => Some(Self::new_hosts_from_map(map)),
+                _ => {
+                    warn!("invalid host map: {:?}", v);
+                    None
+                }
+            })
+            .flatten()
+    }
+
+    fn new_hosts_from_map(map: Mapping) -> impl Iterator<Item = Self> {
+        map.into_iter().filter_map(|(k, v)| match k {
+            Value::String(name) => Some(Self::new(name, v)),
+            _ => {
+                warn!("invalid host name: {:?}", k);
+                None
+            }
+        })
     }
 
     pub fn get_mac(&self, net: &InterfaceNetwork) -> Option<MacAddr> {
@@ -55,9 +75,9 @@ pub enum Label {
     Ip(Vec<Opt>),
 }
 
-impl TryFrom<(&Value, &Value)> for Label {
+impl TryFrom<(Value, Value)> for Label {
     type Error = ();
-    fn try_from((k, v): (&Value, &Value)) -> Result<Self, Self::Error> {
+    fn try_from((k, v): (Value, Value)) -> Result<Self, Self::Error> {
         if let Some(s) = k.as_str() {
             match s.to_lowercase().as_ref() {
                 "mac" => Ok(Self::Mac(Opt::opts_from_vals(v))),
@@ -77,20 +97,20 @@ impl TryFrom<(&Value, &Value)> for Label {
 }
 
 impl Opt {
-    fn opts_from_vals(val: &Value) -> Vec<Opt> {
-        if let Some(s) = val.as_sequence() {
-            return s
-                .iter()
+    fn opts_from_vals(val: Value) -> Vec<Opt> {
+        match val {
+            Value::Sequence(s) => return s
+                .into_iter()
                 .map(|v| Self::opts_from_vals(v))
                 .flatten()
-                .collect();
-        }
-        if let Some(m) = val.as_mapping() {
-            return m
-                .iter()
-                .filter_map(|i| Label::try_from(i).map(|l| Self::Labeled(l)).ok())
-                .collect();
-        }
+                .collect(),
+            Value::Mapping(m) => return m
+                .into_iter()
+                .filter_map(|(k, v)| Label::try_from((k, v)).map(|l| Self::Labeled(l)).ok())
+                .collect(),
+            _ => {},
+        };
+
         if let Some(i) = val.as_u64() {
             return vec![Self::Int(i)];
         }

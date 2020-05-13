@@ -1,18 +1,8 @@
-use crate::ipnet::InNet;
-use crate::ipnet::ToMac;
-use crate::ipnet::TryInNet;
-use crate::ipnet::TryToMac;
-use std::convert::TryInto;
-use std::convert::{From, TryFrom};
-
 use globset::Glob;
 use ipnetwork::IpNetwork;
-use log::warn;
-use pnet::datalink::{interfaces, MacAddr, NetworkInterface};
-use serde_yaml::{Mapping, Value};
-use std::io::{self, Write};
-use std::net::IpAddr;
-use tabwriter::TabWriter;
+use pnet::datalink::{interfaces, NetworkInterface};
+use serde_yaml::Value;
+use std::convert::TryFrom;
 
 #[derive(Debug, Clone)]
 pub struct InterfaceNetwork {

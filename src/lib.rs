@@ -18,6 +18,7 @@ use tabwriter::TabWriter;
 
 pub mod ipnet;
 pub mod network;
+pub mod entry;
 
 pub enum EntryWriteMode {
     DnsMasq,
