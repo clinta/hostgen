@@ -19,8 +19,25 @@ use std::net::Ipv6Addr;
 use tabwriter::TabWriter;
 
 pub struct Host {
-    Name: String,
-    Opts: Vec<Opt>,
+    pub name: String,
+    opts: Vec<Opt>,
+}
+
+impl Host {
+    pub fn new(name: &str, opts: &Value) -> Self {
+        Self {
+            name: name.to_string(),
+            opts: Opt::opts_from_vals(opts),
+        }
+    }
+
+    pub fn get_mac(&self, net: &InterfaceNetwork) -> Option<MacAddr> {
+        Opt::get_mac(&self.opts, net)
+    }
+
+    pub fn ip(&self, net: &InterfaceNetwork) -> Option<IpAddr> {
+        Opt::get_ip(&self.opts, net)
+    }
 }
 
 pub enum Opt {
@@ -41,7 +58,21 @@ pub enum Label {
 impl TryFrom<(&Value, &Value)> for Label {
     type Error = ();
     fn try_from((k, v): (&Value, &Value)) -> Result<Self, Self::Error> {
-        todo!()
+        if let Some(s) = k.as_str() {
+            match s.to_lowercase().as_ref() {
+                "mac" => Ok(Self::Mac(Opt::opts_from_vals(v))),
+                "ip4" | "ipv4" => Ok(Self::Ipv4(Opt::opts_from_vals(v))),
+                "ip6" | "ipv6" => Ok(Self::Ipv6(Opt::opts_from_vals(v))),
+                "ip" => Ok(Self::Ip(Opt::opts_from_vals(v))),
+                _ => {
+                    warn!("unknown label key: {}", s);
+                    Err(())
+                }
+            }
+        } else {
+            warn!("unknown label key: {:?}", k);
+            Err(())
+        }
     }
 }
 
