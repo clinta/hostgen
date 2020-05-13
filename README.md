@@ -10,17 +10,21 @@ eth0: # an interface on the router
 
 Now suppose for these examples that eth0 had the addresses `192.168.1.1/24` and `2001:DB8::/64`.
 
-You can also select interfaces using glob patterns, or by network. So this would be indentical:
+You can also select interfaces using glob patterns, or as a list of selectors:
 
 ```yaml
-192.168.1.0/24:
-  server1:
-    - 10
+["eth0", "eth1"]:
 ```
 
-This does NOT tell the program to generate IP addresses for the `192.168.1.0/24` network. This tells the program to select any interfaces that have addresses
-on the `192.168.1.0/24` network, and generate IP addresses for all networks on those interfaces. So in the example where eth0 has an address on that network, this
-configuration will still generate IPv6 addresses.
+Or you cans elect networks.
+
+```yaml
+192.168.0.0/16:
+```
+
+This tells the program to generate IP addresses for subnets inside the `192.168.0.0/16` network, it does not generate IP addresses using the `192.168.0.0/16` network directly.
+Instead it selects local networks that are inside that network. So in the example where eth0 has the address `192.168.0.1/24` on that network, this
+configuration will generate addresses in the `192.168.0.0/24` network.
 
 Since the only configuration listed for this server is a single integer, first the program will synthisize a mac address from it.
 In this case the mac address will be `02:00:00:00:00:0a`. Where does the `02` come from? Well the script is assuming that this is a locally managed mac address
@@ -55,6 +59,26 @@ eth0:
   server1:
     - 10
     - "::5"
+```
+
+You can customize the generation of ipv4, or ipv6 adddresses using tags as
+follows:
+
+```yaml
+eth0:
+  server1:
+    - 10
+    - ip6: 5
+    - mac: 40
+```
+
+You can skip generating any specific item using `Null`
+
+```yaml
+eth0:
+  server1:
+    - 10
+    - ip6: Null
 ```
 
 Once you have your yaml configuration build, generating the dnsmasq or zone entries is easy. Just run
