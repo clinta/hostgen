@@ -1,4 +1,4 @@
-use serde_yaml::{Sequence, Value};
+use serde_yaml::Value;
 use std::collections;
 use std::collections::HashSet;
 use std::iter::{once, FromIterator};
