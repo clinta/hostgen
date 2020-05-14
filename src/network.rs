@@ -80,8 +80,8 @@ impl InterfaceNetwork {
         }
 
         if let Some(s) = selector.as_str() {
-            if s.chars().nth(0).filter(|c| c == &'!').is_some() {
-                let exclude_selector = Value::String(s.chars().skip(1).collect());
+            if s.starts_with("!") {
+                let exclude_selector = Value::String(s[1..].to_string());
                 let excludes = &Self::filter_networks(networks, &exclude_selector);
                 return networks
                     .into_iter()

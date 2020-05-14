@@ -22,7 +22,7 @@ impl Tags {
     pub fn new_child(&self, val: &Value) -> Self {
         let mut r = self.clone();
         for v in Self::from_val(val) {
-            if v.chars().nth(0).filter(|c| c == &'!').is_some() {
+            if v.starts_with("!") {
                 r.0.remove(&v[1..]);
             } else {
                 r.0.insert(v);
