@@ -1,5 +1,6 @@
 use crate::ipnet::{TryInNet, TryToMac};
 use crate::network::InterfaceNetwork;
+use crate::tags::Tags;
 use ipnetwork::IpNetwork;
 use log::warn;
 use pnet::datalink::MacAddr;
@@ -10,27 +11,29 @@ use std::net::IpAddr;
 pub struct Host {
     pub name: String,
     opts: Vec<Opt>,
+    tags: Tags,
 }
 
 impl Host {
-    pub fn new(name: String, opts: Value) -> Self {
+    pub fn new(name: String, opts: Value, tags: Tags) -> Self {
         Self {
             name: name.to_string(),
             opts: Opt::opts_from_vals(opts),
+            tags,
         }
     }
 
-    pub fn new_hosts(val: Value) -> impl Iterator<Item = Self> {
+    pub fn new_hosts(val: Value, tags: Tags) -> impl Iterator<Item = Self> {
         match val {
-            Value::Sequence(seq) => Self::new_hosts_from_seq(seq),
-            _ => Self::new_hosts_from_seq(vec![val]),
+            Value::Sequence(seq) => Self::new_hosts_from_seq(seq, tags),
+            _ => Self::new_hosts_from_seq(vec![val], tags),
         }
     }
 
-    fn new_hosts_from_seq(seq: serde_yaml::Sequence) -> impl Iterator<Item = Self> {
+    fn new_hosts_from_seq(seq: serde_yaml::Sequence, tags: Tags) -> impl Iterator<Item = Self> {
         seq.into_iter()
-            .filter_map(|v| match v {
-                Value::Mapping(map) => Some(Self::new_hosts_from_map(map)),
+            .filter_map(move |v| match v {
+                Value::Mapping(map) => Some(Self::new_hosts_from_map(map, tags.clone())),
                 _ => {
                     warn!("invalid host map: {:?}", v);
                     None
@@ -39,9 +42,15 @@ impl Host {
             .flatten()
     }
 
-    fn new_hosts_from_map(map: Mapping) -> impl Iterator<Item = Self> {
-        map.into_iter().filter_map(|(k, v)| match k {
-            Value::String(name) => Some(Self::new(name, v)),
+    fn new_hosts_from_map(map: Mapping, tags: Tags) -> impl Iterator<Item = Self> {
+        let mut tags = tags;
+        map.into_iter().filter_map(move |(k, v)| match k {
+            Value::String(name) => {
+                if name.starts_with("_tag") {
+                    tags = tags.new_child(&v);
+                }
+                Some(Self::new(name, v, tags.clone()))
+            }
             _ => {
                 warn!("invalid host name: {:?}", k);
                 None
@@ -49,12 +58,12 @@ impl Host {
         })
     }
 
-    pub fn get_mac(&self, net: &InterfaceNetwork) -> Option<MacAddr> {
-        Opt::get_mac(&self.opts, net)
+    pub fn get_mac(&self, net: &InterfaceNetwork, tags: &Tags) -> Option<MacAddr> {
+        Opt::get_mac(&self.opts, net, tags)
     }
 
-    pub fn get_ip(&self, net: &InterfaceNetwork) -> Option<IpAddr> {
-        Opt::get_ip(&self.opts, net)
+    pub fn get_ip(&self, net: &InterfaceNetwork, tags: &Tags) -> Option<IpAddr> {
+        Opt::get_ip(&self.opts, net, tags)
     }
 }
 
@@ -134,7 +143,7 @@ impl Opt {
         vec![]
     }
 
-    fn get_mac(opts: &Vec<Opt>, net: &InterfaceNetwork) -> Option<MacAddr> {
+    fn get_mac(opts: &Vec<Opt>, net: &InterfaceNetwork, tags: &Tags) -> Option<MacAddr> {
         // try labeled options
         if let Some(o) = opts
             .iter()
@@ -144,7 +153,7 @@ impl Opt {
             })
             .nth(0)
         {
-            return Self::get_mac(o, net);
+            return Self::get_mac(o, net, tags);
         }
 
         opts.iter()
@@ -186,7 +195,7 @@ impl Opt {
             .nth(0)
     }
 
-    fn get_ip(opts: &Vec<Opt>, net: &InterfaceNetwork) -> Option<IpAddr> {
+    fn get_ip(opts: &Vec<Opt>, net: &InterfaceNetwork, tags: &Tags) -> Option<IpAddr> {
         if net.network.is_ipv4() {
             // try labeled ipv4 options
             if let Some(o) = opts
@@ -197,7 +206,7 @@ impl Opt {
                 })
                 .nth(0)
             {
-                return Self::get_ip(o, net);
+                return Self::get_ip(o, net, tags);
             }
         }
 
@@ -211,7 +220,7 @@ impl Opt {
                 })
                 .nth(0)
             {
-                return Self::get_ip(o, net);
+                return Self::get_ip(o, net, tags);
             }
         }
 
@@ -224,7 +233,7 @@ impl Opt {
             })
             .nth(0)
         {
-            return Self::get_ip(o, net);
+            return Self::get_ip(o, net, tags);
         }
 
         opts.iter()

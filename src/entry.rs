@@ -124,10 +124,10 @@ fn entries_from_map(map: Mapping, tags: Tags) -> impl Iterator<Item = Entry> {
     map.into_iter().flat_map(move |(k, v)| {
         let tags = tags.extract(&k);
         let nets = InterfaceNetwork::filtered(&k);
-        Host::new_hosts(v).flat_map(move |h| {
+        Host::new_hosts(v, tags).flat_map(move |h| {
             nets.clone().into_iter().filter_map(move |net| {
-                let ip = h.get_ip(&net)?;
-                Some(Entry::new(&h.name, h.get_mac(&net), ip))
+                let ip = h.get_ip(&net, &Tags::new())?; // todo, this tags must come from cli args
+                Some(Entry::new(&h.name, h.get_mac(&net, &Tags::new()), ip)) // todo, this tags must come from cli args
             })
         })
     })
