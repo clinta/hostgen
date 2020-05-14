@@ -11,7 +11,6 @@ use std::net::IpAddr;
 pub struct Host {
     pub name: String,
     opts: Opts,
-    tags: Tags,
 }
 
 impl Host {
@@ -19,7 +18,6 @@ impl Host {
         Self {
             name: name.to_string(),
             opts: Opts::from_vals(opts, &tags),
-            tags,
         }
     }
 
@@ -78,7 +76,8 @@ impl Opts {
     }
 
     fn from_vals(val: Value, tags: &Tags) -> Self {
-        Self::new(OptVal::from_vals(val, &tags), tags.clone())
+        let tags = tags.extract(&val);
+        Self::new(OptVal::from_vals(val, &tags), tags)
     }
 
     fn get_mac(&self, net: &InterfaceNetwork, tags: &Tags) -> Option<MacAddr> {
