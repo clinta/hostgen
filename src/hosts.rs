@@ -72,6 +72,32 @@ struct Opts {
     tags: Tags,
 }
 
+impl Opts {
+    fn new(opts: Vec<OptVal>, tags: Tags) -> Self {
+        Self{opts, tags}
+    }
+
+    fn from_vals(val: Value, tags: &Tags) -> Self {
+        Self::new(OptVal::from_vals(val, &tags), tags.clone())
+    }
+
+    fn get_mac(&self, net: &InterfaceNetwork, tags: &Tags) -> Option<MacAddr> {
+        if self.tags.matches(tags) {
+            OptVal::get_mac(&self.opts, net, tags)
+        } else {
+            None
+        }
+    }
+
+    fn get_ip(&self, net: &InterfaceNetwork, tags: &Tags) -> Option<IpAddr> {
+        if self.tags.matches(tags) {
+            OptVal::get_ip(&self.opts, net, tags)
+        } else {
+            None
+        }
+    }
+}
+
 pub enum OptVal {
     Labeled(Label),
     Mac(MacAddr),

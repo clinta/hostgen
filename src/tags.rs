@@ -49,6 +49,10 @@ impl Tags {
     pub fn contains(&self, v: &String) -> bool {
         self.0.contains(v)
     }
+
+    pub fn matches(&self, desired: &Tags) -> bool {
+        (self.0.is_empty() && desired.0.is_empty()) || desired.0.iter().any(|o| self.contains(o))
+    }
 }
 
 impl From<HashSet<String>> for Tags {
