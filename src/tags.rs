@@ -11,7 +11,7 @@ impl Tags {
         Self(HashSet::new())
     }
 
-    fn extract(&self, val: &Value) -> Self {
+    pub fn extract(&self, val: &Value) -> Self {
         match val {
             Value::Sequence(seq) => seq
                 .iter()
