@@ -59,11 +59,11 @@ impl Host {
     }
 
     pub fn get_mac(&self, net: &InterfaceNetwork, tags: &Tags) -> Option<MacAddr> {
-        OptVal::get_mac(&self.opts, net)
+        OptVal::get_mac(&self.opts, net, tags)
     }
 
     pub fn get_ip(&self, net: &InterfaceNetwork, tags: &Tags) -> Option<IpAddr> {
-        OptVal::get_ip(&self.opts, net)
+        OptVal::get_ip(&self.opts, net, tags)
     }
 }
 
@@ -148,7 +148,7 @@ impl OptVal {
         vec![]
     }
 
-    fn get_mac(opts: &Vec<OptVal>, net: &InterfaceNetwork) -> Option<MacAddr> {
+    fn get_mac(opts: &Vec<OptVal>, net: &InterfaceNetwork, tags: &Tags) -> Option<MacAddr> {
         // try labeled options
         if let Some(o) = opts
             .iter()
@@ -158,7 +158,7 @@ impl OptVal {
             })
             .nth(0)
         {
-            return Self::get_mac(o, net);
+            return Self::get_mac(o, net, tags);
         }
 
         opts.iter()
@@ -200,7 +200,7 @@ impl OptVal {
             .nth(0)
     }
 
-    fn get_ip(opts: &Vec<OptVal>, net: &InterfaceNetwork) -> Option<IpAddr> {
+    fn get_ip(opts: &Vec<OptVal>, net: &InterfaceNetwork, tags: &Tags) -> Option<IpAddr> {
         if net.network.is_ipv4() {
             // try labeled ipv4 options
             if let Some(o) = opts
@@ -211,7 +211,7 @@ impl OptVal {
                 })
                 .nth(0)
             {
-                return Self::get_ip(o, net);
+                return Self::get_ip(o, net, tags);
             }
         }
 
@@ -225,7 +225,7 @@ impl OptVal {
                 })
                 .nth(0)
             {
-                return Self::get_ip(o, net);
+                return Self::get_ip(o, net, tags);
             }
         }
 
@@ -238,7 +238,7 @@ impl OptVal {
             })
             .nth(0)
         {
-            return Self::get_ip(o, net);
+            return Self::get_ip(o, net, tags);
         }
 
         opts.iter()
