@@ -10,7 +10,7 @@ use std::net::IpAddr;
 
 pub struct Host {
     pub name: String,
-    opts: Vec<Opt>,
+    opts: Vec<OptVal>,
     tags: Tags,
 }
 
@@ -18,7 +18,7 @@ impl Host {
     pub fn new(name: String, opts: Value, tags: Tags) -> Self {
         Self {
             name: name.to_string(),
-            opts: Opt::opts_from_vals(opts),
+            opts: OptVal::from_vals(opts),
             tags,
         }
     }
@@ -59,15 +59,15 @@ impl Host {
     }
 
     pub fn get_mac(&self, net: &InterfaceNetwork, tags: &Tags) -> Option<MacAddr> {
-        Opt::get_mac(&self.opts, net, tags)
+        OptVal::get_mac(&self.opts, net)
     }
 
     pub fn get_ip(&self, net: &InterfaceNetwork, tags: &Tags) -> Option<IpAddr> {
-        Opt::get_ip(&self.opts, net, tags)
+        OptVal::get_ip(&self.opts, net)
     }
 }
 
-pub enum Opt {
+pub enum OptVal {
     Labeled(Label),
     Mac(MacAddr),
     IpNet(IpNetwork),
@@ -76,10 +76,10 @@ pub enum Opt {
 }
 
 pub enum Label {
-    Mac(Vec<Opt>),
-    Ipv4(Vec<Opt>),
-    Ipv6(Vec<Opt>),
-    Ip(Vec<Opt>),
+    Mac(Vec<OptVal>),
+    Ipv4(Vec<OptVal>),
+    Ipv6(Vec<OptVal>),
+    Ip(Vec<OptVal>),
 }
 
 impl TryFrom<(Value, Value)> for Label {
@@ -87,10 +87,10 @@ impl TryFrom<(Value, Value)> for Label {
     fn try_from((k, v): (Value, Value)) -> Result<Self, Self::Error> {
         if let Some(s) = k.as_str() {
             match s.to_lowercase().as_ref() {
-                "mac" => Ok(Self::Mac(Opt::opts_from_vals(v))),
-                "ip4" | "ipv4" => Ok(Self::Ipv4(Opt::opts_from_vals(v))),
-                "ip6" | "ipv6" => Ok(Self::Ipv6(Opt::opts_from_vals(v))),
-                "ip" => Ok(Self::Ip(Opt::opts_from_vals(v))),
+                "mac" => Ok(Self::Mac(OptVal::from_vals(v))),
+                "ip4" | "ipv4" => Ok(Self::Ipv4(OptVal::from_vals(v))),
+                "ip6" | "ipv6" => Ok(Self::Ipv6(OptVal::from_vals(v))),
+                "ip" => Ok(Self::Ip(OptVal::from_vals(v))),
                 _ => {
                     warn!("unknown label key: {}", s);
                     Err(())
@@ -103,13 +103,18 @@ impl TryFrom<(Value, Value)> for Label {
     }
 }
 
-impl Opt {
-    fn opts_from_vals(val: Value) -> Vec<Opt> {
+struct Opts {
+    opts: Vec<OptVal>,
+    tags: Tags,
+}
+
+impl OptVal {
+    fn from_vals(val: Value) -> Vec<OptVal> {
         match val {
             Value::Sequence(s) => {
                 return s
                     .into_iter()
-                    .map(|v| Self::opts_from_vals(v))
+                    .map(|v| Self::from_vals(v))
                     .flatten()
                     .collect()
             }
@@ -143,7 +148,7 @@ impl Opt {
         vec![]
     }
 
-    fn get_mac(opts: &Vec<Opt>, net: &InterfaceNetwork, tags: &Tags) -> Option<MacAddr> {
+    fn get_mac(opts: &Vec<OptVal>, net: &InterfaceNetwork) -> Option<MacAddr> {
         // try labeled options
         if let Some(o) = opts
             .iter()
@@ -153,7 +158,7 @@ impl Opt {
             })
             .nth(0)
         {
-            return Self::get_mac(o, net, tags);
+            return Self::get_mac(o, net);
         }
 
         opts.iter()
@@ -195,7 +200,7 @@ impl Opt {
             .nth(0)
     }
 
-    fn get_ip(opts: &Vec<Opt>, net: &InterfaceNetwork, tags: &Tags) -> Option<IpAddr> {
+    fn get_ip(opts: &Vec<OptVal>, net: &InterfaceNetwork) -> Option<IpAddr> {
         if net.network.is_ipv4() {
             // try labeled ipv4 options
             if let Some(o) = opts
@@ -206,7 +211,7 @@ impl Opt {
                 })
                 .nth(0)
             {
-                return Self::get_ip(o, net, tags);
+                return Self::get_ip(o, net);
             }
         }
 
@@ -220,7 +225,7 @@ impl Opt {
                 })
                 .nth(0)
             {
-                return Self::get_ip(o, net, tags);
+                return Self::get_ip(o, net);
             }
         }
 
@@ -233,7 +238,7 @@ impl Opt {
             })
             .nth(0)
         {
-            return Self::get_ip(o, net, tags);
+            return Self::get_ip(o, net);
         }
 
         opts.iter()
