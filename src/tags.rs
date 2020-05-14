@@ -3,12 +3,27 @@ use std::collections;
 use std::collections::HashSet;
 use std::iter::{once, FromIterator};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Tags(HashSet<String>);
 
 impl Tags {
     pub fn new() -> Self {
         Self(HashSet::new())
+    }
+
+    fn extract(&self, val: &Value) -> Self {
+        match val {
+            Value::Sequence(seq) => seq
+                .iter()
+                .filter(|v| v.is_mapping())
+                .fold(self.clone(), |t, m| t.extract(m)),
+            Value::Mapping(map) => map
+                .iter()
+                .filter(|(k, _)| k.as_str().filter(|k| k.starts_with("_tag")).is_some())
+                .map(|(_, v)| v)
+                .fold(self.clone(), |t, v| t.new_child(v)),
+            _ => self.clone(),
+        }
     }
 
     fn from_val(val: &Value) -> Self {

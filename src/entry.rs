@@ -120,13 +120,11 @@ fn entries_from_seq(seq: serde_yaml::Sequence) -> impl Iterator<Item = Entry> {
 }
 
 fn entries_from_map(map: Mapping) -> impl Iterator<Item = Entry> {
-    let tags  = Tags::new();
+    let mut tags  = Tags::new();
     map.into_iter().flat_map(move |(k, v)| {
-        let tags = if k.as_str().filter(|s| s.to_lowercase().starts_with("_tag")).is_some() {
-            &tags
-        } else {
-            &tags
-        };
+        if k.as_str().filter(|s| s.to_lowercase().starts_with("_tag")).is_some() {
+            tags = tags.new_child(&v);
+        }
         let nets = InterfaceNetwork::filtered(&k);
         Host::new_hosts(v).flat_map(move |h| {
             nets.clone().into_iter().filter_map(move |net| {
