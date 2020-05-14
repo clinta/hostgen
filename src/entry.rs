@@ -1,5 +1,6 @@
 use crate::hosts::Host;
 use crate::network::InterfaceNetwork;
+use crate::tags::Tags;
 use log::warn;
 use pnet::datalink::MacAddr;
 use serde_yaml::{Mapping, Value};
@@ -119,7 +120,13 @@ fn entries_from_seq(seq: serde_yaml::Sequence) -> impl Iterator<Item = Entry> {
 }
 
 fn entries_from_map(map: Mapping) -> impl Iterator<Item = Entry> {
-    map.into_iter().flat_map(|(k, v)| {
+    let tags  = Tags::new();
+    map.into_iter().flat_map(move |(k, v)| {
+        let tags = if k.as_str().filter(|s| s.to_lowercase().starts_with("_tag")).is_some() {
+            &tags
+        } else {
+            &tags
+        };
         let nets = InterfaceNetwork::filtered(&k);
         Host::new_hosts(v).flat_map(move |h| {
             nets.clone().into_iter().filter_map(move |net| {
