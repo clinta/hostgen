@@ -10,7 +10,7 @@ use std::net::IpAddr;
 
 pub struct Host {
     pub name: String,
-    opts: Vec<OptVal>,
+    opts: Opts,
     tags: Tags,
 }
 
@@ -18,7 +18,7 @@ impl Host {
     pub fn new(name: String, opts: Value, tags: Tags) -> Self {
         Self {
             name: name.to_string(),
-            opts: OptVal::from_vals(opts, &tags),
+            opts: Opts::from_vals(opts, &tags),
             tags,
         }
     }
@@ -59,11 +59,11 @@ impl Host {
     }
 
     pub fn get_mac(&self, net: &InterfaceNetwork, tags: &Tags) -> Option<MacAddr> {
-        OptVal::get_mac(&self.opts, net, tags)
+        self.opts.get_mac(net, tags)
     }
 
     pub fn get_ip(&self, net: &InterfaceNetwork, tags: &Tags) -> Option<IpAddr> {
-        OptVal::get_ip(&self.opts, net, tags)
+        self.opts.get_ip(net, tags)
     }
 }
 
