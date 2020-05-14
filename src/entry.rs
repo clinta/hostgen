@@ -101,16 +101,17 @@ impl<I: Iterator<Item = Entry> + Sized> IntoIterator for FormattedEntries<I> {
 }
 
 pub fn entries_from_val(val: Value) -> impl Iterator<Item = Entry> {
+    let tags = Tags::new().extract(&val);
     match val {
-        Value::Sequence(seq) => entries_from_seq(seq),
-        _ => entries_from_seq(vec![val]),
+        Value::Sequence(seq) => entries_from_seq(seq, tags),
+        _ => entries_from_seq(vec![val], tags),
     }
 }
 
-fn entries_from_seq(seq: serde_yaml::Sequence) -> impl Iterator<Item = Entry> {
+fn entries_from_seq(seq: serde_yaml::Sequence, tags: Tags) -> impl Iterator<Item = Entry> {
     seq.into_iter()
-        .filter_map(|v| match v {
-            Value::Mapping(map) => Some(entries_from_map(map)),
+        .filter_map(move |v| match v {
+            Value::Mapping(map) => Some(entries_from_map(map, tags.clone())),
             _ => {
                 warn!("invalid entry map: {:?}", v);
                 None
@@ -119,12 +120,9 @@ fn entries_from_seq(seq: serde_yaml::Sequence) -> impl Iterator<Item = Entry> {
         .flatten()
 }
 
-fn entries_from_map(map: Mapping) -> impl Iterator<Item = Entry> {
-    let mut tags  = Tags::new();
+fn entries_from_map(map: Mapping, tags: Tags) -> impl Iterator<Item = Entry> {
     map.into_iter().flat_map(move |(k, v)| {
-        if k.as_str().filter(|s| s.to_lowercase().starts_with("_tag")).is_some() {
-            tags = tags.new_child(&v);
-        }
+        let tags = tags.extract(&k);
         let nets = InterfaceNetwork::filtered(&k);
         Host::new_hosts(v).flat_map(move |h| {
             nets.clone().into_iter().filter_map(move |net| {
