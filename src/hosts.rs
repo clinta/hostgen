@@ -18,7 +18,7 @@ impl Host {
     pub fn new(name: String, opts: Value, tags: Tags) -> Self {
         Self {
             name: name.to_string(),
-            opts: OptVal::from_vals(opts),
+            opts: OptVal::from_vals(opts, &tags),
             tags,
         }
     }
@@ -67,6 +67,11 @@ impl Host {
     }
 }
 
+struct Opts {
+    opts: Vec<OptVal>,
+    tags: Tags,
+}
+
 pub enum OptVal {
     Labeled(Label),
     Mac(MacAddr),
@@ -82,15 +87,15 @@ pub enum Label {
     Ip(Vec<OptVal>),
 }
 
-impl TryFrom<(Value, Value)> for Label {
+impl TryFrom<(Value, Value, &Tags)> for Label {
     type Error = ();
-    fn try_from((k, v): (Value, Value)) -> Result<Self, Self::Error> {
+    fn try_from((k, v, t): (Value, Value, &Tags)) -> Result<Self, Self::Error> {
         if let Some(s) = k.as_str() {
             match s.to_lowercase().as_ref() {
-                "mac" => Ok(Self::Mac(OptVal::from_vals(v))),
-                "ip4" | "ipv4" => Ok(Self::Ipv4(OptVal::from_vals(v))),
-                "ip6" | "ipv6" => Ok(Self::Ipv6(OptVal::from_vals(v))),
-                "ip" => Ok(Self::Ip(OptVal::from_vals(v))),
+                "mac" => Ok(Self::Mac(OptVal::from_vals(v, t))),
+                "ip4" | "ipv4" => Ok(Self::Ipv4(OptVal::from_vals(v, t))),
+                "ip6" | "ipv6" => Ok(Self::Ipv6(OptVal::from_vals(v, t))),
+                "ip" => Ok(Self::Ip(OptVal::from_vals(v, t))),
                 _ => {
                     warn!("unknown label key: {}", s);
                     Err(())
@@ -103,25 +108,20 @@ impl TryFrom<(Value, Value)> for Label {
     }
 }
 
-struct Opts {
-    opts: Vec<OptVal>,
-    tags: Tags,
-}
-
 impl OptVal {
-    fn from_vals(val: Value) -> Vec<OptVal> {
+    fn from_vals(val: Value, tags: &Tags) -> Vec<OptVal> {
         match val {
             Value::Sequence(s) => {
                 return s
                     .into_iter()
-                    .map(|v| Self::from_vals(v))
+                    .map(|v| Self::from_vals(v, tags))
                     .flatten()
                     .collect()
             }
             Value::Mapping(m) => {
                 return m
                     .into_iter()
-                    .filter_map(|(k, v)| Label::try_from((k, v)).map(|l| Self::Labeled(l)).ok())
+                    .filter_map(|(k, v)| Label::try_from((k, v, tags)).map(|l| Self::Labeled(l)).ok())
                     .collect()
             }
             _ => {}
