@@ -51,7 +51,7 @@ impl Tags {
     }
 
     pub fn matches(&self, desired: &Tags) -> bool {
-        (self.0.is_empty() && desired.0.is_empty()) || desired.0.iter().any(|o| self.contains(o))
+        desired.0.is_empty() || desired.0.iter().any(|o| self.contains(o))
     }
 }
 
