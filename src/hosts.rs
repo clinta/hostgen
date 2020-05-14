@@ -67,7 +67,7 @@ impl Host {
     }
 }
 
-struct Opts {
+pub struct Opts {
     opts: Vec<OptVal>,
     tags: Tags,
 }
@@ -107,10 +107,10 @@ pub enum OptVal {
 }
 
 pub enum Label {
-    Mac(Vec<OptVal>),
-    Ipv4(Vec<OptVal>),
-    Ipv6(Vec<OptVal>),
-    Ip(Vec<OptVal>),
+    Mac(Opts),
+    Ipv4(Opts),
+    Ipv6(Opts),
+    Ip(Opts),
 }
 
 impl TryFrom<(Value, Value, &Tags)> for Label {
@@ -118,10 +118,10 @@ impl TryFrom<(Value, Value, &Tags)> for Label {
     fn try_from((k, v, t): (Value, Value, &Tags)) -> Result<Self, Self::Error> {
         if let Some(s) = k.as_str() {
             match s.to_lowercase().as_ref() {
-                "mac" => Ok(Self::Mac(OptVal::from_vals(v, t))),
-                "ip4" | "ipv4" => Ok(Self::Ipv4(OptVal::from_vals(v, t))),
-                "ip6" | "ipv6" => Ok(Self::Ipv6(OptVal::from_vals(v, t))),
-                "ip" => Ok(Self::Ip(OptVal::from_vals(v, t))),
+                "mac" => Ok(Self::Mac(Opts::from_vals(v, t))),
+                "ip4" | "ipv4" => Ok(Self::Ipv4(Opts::from_vals(v, t))),
+                "ip6" | "ipv6" => Ok(Self::Ipv6(Opts::from_vals(v, t))),
+                "ip" => Ok(Self::Ip(Opts::from_vals(v, t))),
                 _ => {
                     warn!("unknown label key: {}", s);
                     Err(())
@@ -184,7 +184,7 @@ impl OptVal {
             })
             .nth(0)
         {
-            return Self::get_mac(o, net, tags);
+            return o.get_mac(net, tags);
         }
 
         opts.iter()
@@ -237,7 +237,7 @@ impl OptVal {
                 })
                 .nth(0)
             {
-                return Self::get_ip(o, net, tags);
+                return o.get_ip(net, tags);
             }
         }
 
@@ -251,7 +251,7 @@ impl OptVal {
                 })
                 .nth(0)
             {
-                return Self::get_ip(o, net, tags);
+                return o.get_ip(net, tags);
             }
         }
 
@@ -264,7 +264,7 @@ impl OptVal {
             })
             .nth(0)
         {
-            return Self::get_ip(o, net, tags);
+            return o.get_ip(net, tags);
         }
 
         opts.iter()
