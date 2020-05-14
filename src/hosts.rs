@@ -57,11 +57,27 @@ impl Host {
     }
 
     pub fn get_mac(&self, net: &InterfaceNetwork, tags: &Tags) -> Option<MacAddr> {
-        self.opts.get_mac(net, tags)
+        self.get_mac_with_tags(net, tags).map(|(mac, _)| mac)
+    }
+
+    pub fn get_mac_with_tags<'a>(
+        &'a self,
+        net: &InterfaceNetwork,
+        tags: &'a Tags,
+    ) -> Option<(MacAddr, &'a Tags)> {
+        self.opts.get_mac_with_tags(net, tags)
     }
 
     pub fn get_ip(&self, net: &InterfaceNetwork, tags: &Tags) -> Option<IpAddr> {
-        self.opts.get_ip(net, tags)
+        self.get_ip_with_tags(net, tags).map(|(ip, _)| ip)
+    }
+
+    pub fn get_ip_with_tags<'a>(
+        &'a self,
+        net: &InterfaceNetwork,
+        tags: &'a Tags,
+    ) -> Option<(IpAddr, &'a Tags)> {
+        self.opts.get_ip_with_tags(net, tags)
     }
 }
 
@@ -72,7 +88,7 @@ pub struct Opts {
 
 impl Opts {
     fn new(opts: Vec<OptVal>, tags: Tags) -> Self {
-        Self{opts, tags}
+        Self { opts, tags }
     }
 
     fn from_vals(val: Value, tags: &Tags) -> Self {
@@ -80,17 +96,29 @@ impl Opts {
         Self::new(OptVal::from_vals(val, &tags), tags)
     }
 
-    fn get_mac(&self, net: &InterfaceNetwork, tags: &Tags) -> Option<MacAddr> {
+    fn get_mac_with_tags<'a>(
+        &'a self,
+        net: &InterfaceNetwork,
+        tags: &'a Tags,
+    ) -> Option<(MacAddr, &'a Tags)> {
         if self.tags.matches(tags) {
-            OptVal::get_mac(&self.opts, net, tags)
+            OptVal::get_mac_with_tags(&self.opts, net, tags)
         } else {
             None
         }
     }
 
-    fn get_ip(&self, net: &InterfaceNetwork, tags: &Tags) -> Option<IpAddr> {
+    fn get_mac(&self, net: &InterfaceNetwork, tags: &Tags) -> Option<MacAddr> {
+        self.get_mac_with_tags(net, tags).map(|(mac, _)| mac)
+    }
+
+    fn get_ip_with_tags<'a>(
+        &'a self,
+        net: &InterfaceNetwork,
+        tags: &'a Tags,
+    ) -> Option<(IpAddr, &'a Tags)> {
         if self.tags.matches(tags) {
-            OptVal::get_ip(&self.opts, net, tags)
+            OptVal::get_ip_with_tags(&self.opts, net, tags)
         } else {
             None
         }
@@ -146,7 +174,9 @@ impl OptVal {
             Value::Mapping(m) => {
                 return m
                     .into_iter()
-                    .filter_map(|(k, v)| Label::try_from((k, v, tags)).map(|l| Self::Labeled(l)).ok())
+                    .filter_map(|(k, v)| {
+                        Label::try_from((k, v, tags)).map(|l| Self::Labeled(l)).ok()
+                    })
                     .collect()
             }
             _ => {}
@@ -173,7 +203,11 @@ impl OptVal {
         vec![]
     }
 
-    fn get_mac(opts: &Vec<OptVal>, net: &InterfaceNetwork, tags: &Tags) -> Option<MacAddr> {
+    fn get_mac_with_tags<'a>(
+        opts: &'a Vec<OptVal>,
+        net: &InterfaceNetwork,
+        tags: &'a Tags,
+    ) -> Option<(MacAddr, &'a Tags)> {
         // try labeled options
         if let Some(o) = opts
             .iter()
@@ -183,9 +217,13 @@ impl OptVal {
             })
             .nth(0)
         {
-            return o.get_mac(net, tags);
+            return o.get_mac_with_tags(net, tags);
         }
 
+        return Self::get_mac(opts, net).map(|mac| (mac, tags));
+    }
+
+    fn get_mac(opts: &Vec<OptVal>, net: &InterfaceNetwork) -> Option<MacAddr> {
         opts.iter()
             .filter_map(|o| {
                 // parsed macs
@@ -225,7 +263,11 @@ impl OptVal {
             .nth(0)
     }
 
-    fn get_ip(opts: &Vec<OptVal>, net: &InterfaceNetwork, tags: &Tags) -> Option<IpAddr> {
+    fn get_ip_with_tags<'a>(
+        opts: &'a Vec<OptVal>,
+        net: &InterfaceNetwork,
+        tags: &'a Tags,
+    ) -> Option<(IpAddr, &'a Tags)> {
         if net.network.is_ipv4() {
             // try labeled ipv4 options
             if let Some(o) = opts
@@ -236,7 +278,7 @@ impl OptVal {
                 })
                 .nth(0)
             {
-                return o.get_ip(net, tags);
+                return o.get_ip_with_tags(net, tags);
             }
         }
 
@@ -250,7 +292,7 @@ impl OptVal {
                 })
                 .nth(0)
             {
-                return o.get_ip(net, tags);
+                return o.get_ip_with_tags(net, tags);
             }
         }
 
@@ -263,9 +305,13 @@ impl OptVal {
             })
             .nth(0)
         {
-            return o.get_ip(net, tags);
+            return o.get_ip_with_tags(net, tags);
         }
 
+        Self::get_ip(opts, net).map(|ip| (ip, tags))
+    }
+
+    fn get_ip(opts: &Vec<OptVal>, net: &InterfaceNetwork) -> Option<IpAddr> {
         opts.iter()
             .filter_map(|o| {
                 // parsed ips in same network
