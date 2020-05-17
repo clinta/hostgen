@@ -178,8 +178,8 @@ impl TryInNet<Ipv4Network, Ipv4Addr> for Ipv6Addr {
 impl TryInNet<IpNetwork, IpAddr> for Ipv4Addr {
     fn try_in_net(&self, net: &IpNetwork) -> Option<IpAddr> {
         match net {
-            IpNetwork::V4(v4) => self.try_in_net(v4).map(|v4| IpAddr::V4(v4)),
-            IpNetwork::V6(v6) => self.try_in_net(v6).map(|v6| IpAddr::V6(v6)),
+            IpNetwork::V4(v4) => self.try_in_net(v4).map(IpAddr::V4),
+            IpNetwork::V6(v6) => self.try_in_net(v6).map(IpAddr::V6),
         }
     }
 }
@@ -187,8 +187,8 @@ impl TryInNet<IpNetwork, IpAddr> for Ipv4Addr {
 impl TryInNet<IpNetwork, IpAddr> for Ipv6Addr {
     fn try_in_net(&self, net: &IpNetwork) -> Option<IpAddr> {
         match net {
-            IpNetwork::V4(v4) => self.try_in_net(v4).map(|v4| IpAddr::V4(v4)),
-            IpNetwork::V6(v6) => self.try_in_net(v6).map(|v6| IpAddr::V6(v6)),
+            IpNetwork::V4(v4) => self.try_in_net(v4).map(IpAddr::V4),
+            IpNetwork::V6(v6) => self.try_in_net(v6).map(IpAddr::V6),
         }
     }
 }

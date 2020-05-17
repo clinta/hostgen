@@ -38,7 +38,7 @@ impl InterfaceNetwork {
             .map(|i| {
                 i.ips
                     .iter()
-                    .map(move |net| Self::new_with_interface(i.clone(), net.clone()))
+                    .map(move |net| Self::new_with_interface(i.clone(), *net))
             })
             .flatten()
             .collect()
@@ -48,7 +48,7 @@ impl InterfaceNetwork {
         Self::filter_networks(&Self::all(), selector)
     }
 
-    fn filter_networks(networks: &Vec<Self>, selector: &Value) -> Vec<Self> {
+    fn filter_networks(networks: &[Self], selector: &Value) -> Vec<Self> {
         if let Some(seq) = selector.as_sequence() {
             return seq
                 .iter()
@@ -73,18 +73,18 @@ impl InterfaceNetwork {
 
         if let Some(i) = selector.as_u64().and_then(|x| u32::try_from(x).ok()) {
             return networks
-                .into_iter()
+                .iter()
                 .filter(|x| x.iface.as_ref().filter(|iface| iface.index == i).is_some())
                 .cloned()
                 .collect();
         }
 
         if let Some(s) = selector.as_str() {
-            if s.starts_with("!") {
+            if s.starts_with('!') {
                 let exclude_selector = Value::String(s[1..].to_string());
                 let excludes = &Self::filter_networks(networks, &exclude_selector);
                 return networks
-                    .into_iter()
+                    .iter()
                     .filter(|n| !excludes.contains(n))
                     .cloned()
                     .collect();
@@ -93,14 +93,14 @@ impl InterfaceNetwork {
             match s.to_lowercase().as_ref() {
                 "v4" | "ip4" | "ipv4" => {
                     return networks
-                        .into_iter()
+                        .iter()
                         .filter(|x| x.network.is_ipv4())
                         .cloned()
                         .collect()
                 }
                 "v6" | "ip6" | "ipv6" => {
                     return networks
-                        .into_iter()
+                        .iter()
                         .filter(|x| x.network.is_ipv6())
                         .cloned()
                         .collect()
@@ -110,7 +110,7 @@ impl InterfaceNetwork {
 
             if let Ok(net) = s.parse::<IpNetwork>() {
                 return networks
-                    .into_iter()
+                    .iter()
                     .filter(|x| net.contains(x.network.ip()))
                     .cloned()
                     .collect();
@@ -119,7 +119,7 @@ impl InterfaceNetwork {
             if let Ok(glob) = Glob::new(s) {
                 let glob = glob.compile_matcher();
                 return networks
-                    .into_iter()
+                    .iter()
                     .filter(|x| {
                         x.iface
                             .as_ref()
@@ -131,7 +131,7 @@ impl InterfaceNetwork {
             }
 
             return networks
-                .into_iter()
+                .iter()
                 .filter(|x| x.iface.as_ref().filter(|iface| iface.name == s).is_some())
                 .cloned()
                 .collect();

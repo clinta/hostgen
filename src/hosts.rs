@@ -15,7 +15,7 @@ pub struct Host {
 impl Host {
     pub fn new(name: String, opts: Value) -> Self {
         Self {
-            name: name.to_string(),
+            name,
             opts: Opt::opts_from_vals(opts),
         }
     }
@@ -98,16 +98,12 @@ impl Opt {
     fn opts_from_vals(val: Value) -> Vec<Opt> {
         match val {
             Value::Sequence(s) => {
-                return s
-                    .into_iter()
-                    .map(|v| Self::opts_from_vals(v))
-                    .flatten()
-                    .collect()
+                return s.into_iter().map(Self::opts_from_vals).flatten().collect()
             }
             Value::Mapping(m) => {
                 return m
                     .into_iter()
-                    .filter_map(|(k, v)| Label::try_from((k, v)).map(|l| Self::Labeled(l)).ok())
+                    .filter_map(|(k, v)| Label::try_from((k, v)).map(Self::Labeled).ok())
                     .collect()
             }
             _ => {}
@@ -134,7 +130,7 @@ impl Opt {
         vec![]
     }
 
-    fn get_mac(opts: &Vec<Opt>, net: &InterfaceNetwork) -> Option<MacAddr> {
+    fn get_mac(opts: &[Opt], net: &InterfaceNetwork) -> Option<MacAddr> {
         // try labeled options
         if let Some(o) = opts
             .iter()
@@ -142,7 +138,7 @@ impl Opt {
                 Self::Labeled(Label::Mac(mac_opts)) => Some(mac_opts),
                 _ => None,
             })
-            .nth(0)
+            .next()
         {
             return Self::get_mac(o, net);
         }
@@ -151,7 +147,7 @@ impl Opt {
             .filter_map(|o| {
                 // parsed macs
                 match o {
-                    Self::Mac(mac) => Some(mac.clone()),
+                    Self::Mac(mac) => Some(*mac),
                     _ => None,
                 }
             })
@@ -183,10 +179,10 @@ impl Opt {
                     _ => None,
                 }
             }))
-            .nth(0)
+            .next()
     }
 
-    fn get_ip(opts: &Vec<Opt>, net: &InterfaceNetwork) -> Option<IpAddr> {
+    fn get_ip(opts: &[Opt], net: &InterfaceNetwork) -> Option<IpAddr> {
         if net.network.is_ipv4() {
             // try labeled ipv4 options
             if let Some(o) = opts
@@ -195,7 +191,7 @@ impl Opt {
                     Self::Labeled(Label::Ipv4(ip_opts)) => Some(ip_opts),
                     _ => None,
                 })
-                .nth(0)
+                .next()
             {
                 return Self::get_ip(o, net);
             }
@@ -209,7 +205,7 @@ impl Opt {
                     Self::Labeled(Label::Ipv6(ip_opts)) => Some(ip_opts),
                     _ => None,
                 })
-                .nth(0)
+                .next()
             {
                 return Self::get_ip(o, net);
             }
@@ -222,7 +218,7 @@ impl Opt {
                 Self::Labeled(Label::Ip(ip_opts)) => Some(ip_opts),
                 _ => None,
             })
-            .nth(0)
+            .next()
         {
             return Self::get_ip(o, net);
         }
@@ -282,6 +278,6 @@ impl Opt {
                     _ => None,
                 }
             }))
-            .nth(0)
+            .next()
     }
 }
