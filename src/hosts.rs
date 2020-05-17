@@ -2,7 +2,7 @@ use crate::ipnet::{TryInNet, TryToMac};
 use crate::network::InterfaceNetwork;
 use crate::tags::Tags;
 use ipnetwork::IpNetwork;
-use log::warn;
+use log::{debug, warn};
 use pnet::datalink::MacAddr;
 use serde_yaml::{Mapping, Value};
 use std::convert::TryFrom;
@@ -96,6 +96,10 @@ impl Opts {
         if self.tags.matches(tags) {
             OptVal::get_mac_with_tags(&self.opts, net, tags, &self.tags)
         } else {
+            debug!(
+                "skipping mac: requested tags: {:?} don't match host tags {:?}",
+                tags, self.tags
+            );
             None
         }
     }
@@ -104,6 +108,10 @@ impl Opts {
         if self.tags.matches(tags) {
             OptVal::get_ip_with_tags(&self.opts, net, tags, &self.tags)
         } else {
+            debug!(
+                "skipping ip: requested tags: {:?} don't match host tags {:?}",
+                tags, self.tags
+            );
             None
         }
     }

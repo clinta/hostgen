@@ -1,11 +1,9 @@
 use crate::hosts::Host;
 use crate::network::InterfaceNetwork;
 use crate::tags::Tags;
-use log::warn;
+use log::{debug, warn};
 use pnet::datalink::MacAddr;
-use serde::{Serialize, Serializer};
 use serde_yaml::{Mapping, Value};
-use std::collections::HashMap;
 use std::io::{self, Write};
 use std::net::IpAddr;
 use tabwriter::TabWriter;
@@ -14,16 +12,14 @@ pub struct Entry {
     pub name: String,
     pub mac: Option<MacAddr>,
     pub ip: IpAddr,
-    pub tags: Tags,
 }
 
 impl Entry {
-    pub fn new(name: &str, mac: Option<MacAddr>, ip: IpAddr, tags: Tags) -> Self {
+    pub fn new(name: &str, mac: Option<MacAddr>, ip: IpAddr) -> Self {
         Entry {
             name: name.to_string(),
             mac,
             ip,
-            tags,
         }
     }
 
@@ -127,11 +123,19 @@ fn entries_from_seq(seq: serde_yaml::Sequence, tags: Tags) -> impl Iterator<Item
 fn entries_from_map(map: Mapping, tags: Tags) -> impl Iterator<Item = Entry> {
     map.into_iter().flat_map(move |(k, v)| {
         let tags = tags.extract(&k);
+        debug!("top level tags: {:?}", tags);
         let nets = InterfaceNetwork::filtered(&k);
+        debug!("top level networks: {:?}", nets);
         Host::new_hosts(v, tags).flat_map(move |h| {
+            debug!("checking host: {:?}", h.name);
             nets.clone().into_iter().filter_map(move |net| {
+                debug!("getting host: {:?} address in : {:?}", h.name, net);
                 let (ip, tags) = h.get_ip_with_tags(&net, &Tags::new())?; // todo, this tags must come from cli args
-                Some(Entry::new(&h.name, h.get_mac(&net, &Tags::new()), ip, tags.clone())) // todo, this tags must come from cli args
+                debug!(
+                    "Returning host {:?} with ip: {:?} and tags {:?}",
+                    h.name, ip, tags
+                );
+                Some(Entry::new(&h.name, h.get_mac(&net, &Tags::new()), ip)) // todo, this tags must come from cli args
             })
         })
     })

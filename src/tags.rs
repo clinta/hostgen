@@ -3,7 +3,7 @@ use std::collections;
 use std::collections::HashSet;
 use std::iter::{once, FromIterator};
 
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct Tags(HashSet<String>);
 
 impl Tags {
