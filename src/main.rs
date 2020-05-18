@@ -1,8 +1,6 @@
-#![feature(ip)]
-
 use clap::{App, Arg, SubCommand};
-use hostgen::{EntryIterator, EntryWriteMode};
-use serde_yaml::Mapping;
+use hostgen::entry::{entries_from_val, EntryIterator};
+use serde_yaml::Value;
 use std::fs::File;
 use std::io::{self};
 
@@ -31,15 +29,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .subcommand(SubCommand::with_name("dnsmasq").about("generates dnsmasq hosts"))
         .subcommand(SubCommand::with_name("zone").about("generates zone entries"))
+        .subcommand(SubCommand::with_name("env").about("generates zone entries"))
         .get_matches();
 
     let f = std::fs::File::open(matches.value_of("config").unwrap_or("hosts.yaml"))?;
-    let data: Mapping = serde_yaml::from_reader(f)?;
+    let data: Value = serde_yaml::from_reader(f)?;
 
-    let mut entries = match matches.subcommand_name() {
-        Some("dnsmasq") => EntryIterator::new(&data, EntryWriteMode::DnsMasq),
-        Some("zone") => EntryIterator::new(&data, EntryWriteMode::Zone),
-        _ => return Ok(()),
+    let entries = entries_from_val(data);
+    let entries = {
+        match matches.subcommand_name() {
+            Some("dnsmasq") => entries.as_dnsmasq_reservations(),
+            Some("zone") => entries.as_zone_records(),
+            Some("env") => entries.as_env_vars(),
+            _ => return Ok(()),
+        }
     };
 
     if let Some(output) = matches.value_of("output") {
