@@ -46,6 +46,11 @@ impl Entry {
         elems.push(self.ip.to_string());
         elems.join("\t")
     }
+
+    pub fn as_env_var(&self) -> String {
+        let v = if self.ip.is_ipv4() { "V4" } else { "V6" };
+        format!("{}_{}={}", self.name.replace('.', "_").replace('-', "_").to_uppercase(), v, self.ip)
+    }
 }
 
 pub trait EntryIterator
@@ -59,6 +64,9 @@ where
     fn as_zone_records(self) -> FormattedEntries<Self> {
         FormattedEntries::ZoneRecords(self)
     }
+    fn as_env_vars(self) -> FormattedEntries<Self> {
+        FormattedEntries::EnvVars(self)
+    }
 }
 
 impl<I: Iterator<Item = Entry> + Sized> EntryIterator for I {}
@@ -66,17 +74,18 @@ impl<I: Iterator<Item = Entry> + Sized> EntryIterator for I {}
 pub enum FormattedEntries<I: Iterator<Item = Entry> + Sized> {
     DnsmasqReservations(I),
     ZoneRecords(I),
+    EnvVars(I),
 }
 
 impl<I: Iterator<Item = Entry> + Sized> FormattedEntries<I> {
     pub fn write<W: io::Write>(self, w: &mut W) -> std::io::Result<()> {
         match self {
-            Self::DnsmasqReservations(_) => self.raw_write(w),
             Self::ZoneRecords(_) => {
                 let mut w = TabWriter::new(w);
                 self.raw_write(&mut w)?;
                 w.flush()
             }
+            Self::DnsmasqReservations(_) | Self::EnvVars(_) => self.raw_write(w),
         }
     }
     fn raw_write<W: io::Write>(self, w: &mut W) -> std::io::Result<()> {
@@ -95,6 +104,7 @@ impl<I: Iterator<Item = Entry> + Sized> IntoIterator for FormattedEntries<I> {
         match self {
             Self::DnsmasqReservations(i) => i.map(|e| e.as_dnsmasq_entry()),
             Self::ZoneRecords(i) => i.map(|e| e.as_zone_entry()),
+            Self::EnvVars(i) => i.map(|e| e.as_env_var()),
         }
     }
 }

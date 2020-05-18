@@ -29,6 +29,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .subcommand(SubCommand::with_name("dnsmasq").about("generates dnsmasq hosts"))
         .subcommand(SubCommand::with_name("zone").about("generates zone entries"))
+        .subcommand(SubCommand::with_name("env").about("generates zone entries"))
         .get_matches();
 
     let f = std::fs::File::open(matches.value_of("config").unwrap_or("hosts.yaml"))?;
@@ -39,6 +40,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         match matches.subcommand_name() {
             Some("dnsmasq") => entries.as_dnsmasq_reservations(),
             Some("zone") => entries.as_zone_records(),
+            Some("env") => entries.as_env_vars(),
             _ => return Ok(()),
         }
     };
