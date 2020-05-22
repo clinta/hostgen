@@ -1,5 +1,6 @@
 use crate::hosts::Host;
 use crate::network::InterfaceNetwork;
+use crate::chain::ChainedEntryIterator;
 use log::warn;
 use pnet::datalink::MacAddr;
 use serde_yaml::{Mapping, Value};
@@ -49,7 +50,12 @@ impl Entry {
 
     pub fn as_env_var(&self) -> String {
         let v = if self.ip.is_ipv4() { "V4" } else { "V6" };
-        format!("{}_{}={}", self.name.replace('.', "_").replace('-', "_").to_uppercase(), v, self.ip)
+        format!(
+            "{}_{}={}",
+            self.name.replace('.', "_").replace('-', "_").to_uppercase(),
+            v,
+            self.ip
+        )
     }
 }
 
@@ -66,6 +72,10 @@ where
     }
     fn as_env_vars(self) -> FormattedEntries<Self> {
         FormattedEntries::EnvVars(self)
+    }
+
+    fn chain_entries<J: Iterator<Item=Entry> + Sized>(self, other: J) -> ChainedEntryIterator<Self, J> {
+        ChainedEntryIterator::new(self, other)
     }
 }
 
