@@ -23,6 +23,15 @@ impl Entry {
         }
     }
 
+    pub fn from_dnsmasq_lease(line: &str) -> Option<Self> {
+        let mut words = line.split_whitespace();
+        words.next(); // First element is expiration, skip it
+        let mac: Option<MacAddr> = words.next().and_then(|m| m.parse().ok());
+        let ip: IpAddr = words.next().and_then(|ip| ip.parse().ok())?;
+        let name = words.next().filter(|s| *s != "*")?;
+        Some(Self::new(name, mac, ip))
+    }
+
     pub fn as_dnsmasq_entry(&self) -> String {
         let mut elems = Vec::new();
         if let Some(mac) = self.mac {
@@ -148,4 +157,23 @@ fn entries_from_map(map: Mapping) -> impl Iterator<Item = Entry> {
             })
         })
     })
+}
+
+pub fn entries_from_dnsmasq_leases<I: Iterator<Item=String>>(lines: I) -> impl Iterator<Item = Entry> {
+    lines.filter_map(|l| Entry::from_dnsmasq_lease(&l))
+}
+
+pub enum EntryIteratorFrom<V: Iterator<Item=Entry>, D: Iterator<Item=Entry>> {
+    Val(V),
+    DnsMasq(D),
+}
+
+impl<V: Iterator<Item=Entry>, D: Iterator<Item=Entry>> Iterator for EntryIteratorFrom<V, D> {
+    type Item = Entry;
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            Self::Val(v) => v.next(),
+            Self::DnsMasq(d) => d.next(),
+        }
+    }
 }

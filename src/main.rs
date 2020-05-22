@@ -1,15 +1,18 @@
 use clap::{App, Arg};
 use hostgen::chain::IntoFlatEntryIterator;
-use hostgen::entry::{entries_from_val, EntryIterator};
+use hostgen::entry::entries_from_dnsmasq_leases;
+use hostgen::entry::{entries_from_val, EntryIterator, EntryIteratorFrom};
+use itertools::Itertools;
 use log::error;
 use serde_yaml::Value;
 use std::fs::File;
+use std::io::BufRead;
 use std::io::{self};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
     let matches = App::new("Host Config Generator")
-        .version("0.1")
+        .version("0.2")
         .author("Clint Armstrong <clint@clintarmstrong.net>")
         .about("Generates dnsmasq and zonec configs")
         .arg(
@@ -23,6 +26,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .multiple(true),
         )
         .arg(
+            Arg::with_name("leases")
+                .short("dl")
+                .long("leases")
+                .value_name("FILE")
+                .help("dnsmasq leases file")
+                .takes_value(true)
+                .multiple(true),
+        )
+        .arg(
             Arg::with_name("output")
                 .short("o")
                 .long("output")
@@ -32,25 +44,38 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .arg(
             Arg::with_name("format")
-            .short("f")
-            .long("format")
-            .takes_value(true)
-            .required(true)
-            .possible_values(&["dnsmasq", "zone", "env"])
+                .short("f")
+                .long("format")
+                .takes_value(true)
+                .required(true)
+                .possible_values(&["dnsmasq", "zone", "env"]),
         )
         .get_matches();
 
-    let entries = matches
-        .values_of("config")
-        .unwrap()
-        .filter_map(|config| {
-            let f = std::fs::File::open(config)
-                .on_err(|e| error!("unable to read {}: {}", config, e))
-                .ok()?;
-            let data: Value = serde_yaml::from_reader(f)
-                .on_err(|e| error!("unable to parse yaml in {}: {}", config, e))
-                .ok()?;
-            Some(entries_from_val(data))
+    let entries = ordered_values_of(&matches, "config", "leases")
+        .filter_map(|(a, v)| match a {
+            "config" => {
+                let f = std::fs::File::open(v)
+                    .on_err(|e| error!("unable to read {}: {}", v, e))
+                    .ok()?;
+                let data: Value = serde_yaml::from_reader(f)
+                    .on_err(|e| error!("unable to parse yaml in {}: {}", v, e))
+                    .ok()?;
+                Some(EntryIteratorFrom::Val(entries_from_val(data)))
+            }
+            "leases" => {
+                let f = std::fs::File::open(v)
+                    .on_err(|e| error!("unable to read {}: {}", v, e))
+                    .ok()?;
+                let lines = io::BufReader::new(f).lines().filter_map(move |l| {
+                    l.on_err(|e| error!("error readling line in {}: {}", v, e))
+                        .ok()
+                });
+                Some(EntryIteratorFrom::DnsMasq(entries_from_dnsmasq_leases(
+                    lines,
+                )))
+            }
+            _ => None,
         })
         .flatten_entries();
 
@@ -86,4 +111,23 @@ impl<T, E> OnErr<T, E> for Result<T, E> {
         }
         self
     }
+}
+
+fn ordered_values_of<'a>(
+    matches: &'a clap::ArgMatches,
+    arg1: &'a str,
+    arg2: &'a str,
+) -> impl Iterator<Item = (&'a str, &'a str)> {
+    enumerate_values_of(matches, arg1)
+        .merge(enumerate_values_of(matches, arg2))
+        .map(|(_, arg, v)| (arg, v))
+}
+
+fn enumerate_values_of<'a>(
+    matches: &'a clap::ArgMatches,
+    arg: &'a str,
+) -> impl Iterator<Item = (usize, &'a str, &'a str)> + 'a {
+    let idxs = matches.indices_of(arg).unwrap_or_default();
+    let vals = matches.values_of(arg).unwrap_or_default();
+    idxs.zip(vals).map(move |(i, v)| (i, arg, v))
 }
