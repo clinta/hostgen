@@ -1,4 +1,4 @@
-use crate::ipnet::{TryInNet, TryToMac};
+use crate::ipnet::{ToMac, TryInNet, TryToMac};
 use crate::network::InterfaceNetwork;
 use ipnetwork::IpNetwork;
 use log::warn;
@@ -258,9 +258,9 @@ impl Opt {
                 }
             }))
             .chain(opts.iter().filter_map(|o| {
-                // integers
+                // integers (as mac addresses)
                 match o {
-                    Self::Int(i) => i.try_in_net(&net.network),
+                    Self::Int(i) => i.to_mac().try_in_net(&net.network),
                     _ => None,
                 }
             }))
